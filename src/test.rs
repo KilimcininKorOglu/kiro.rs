@@ -3,6 +3,7 @@ use futures::StreamExt;
 use crate::debug::{print_event, print_event_verbose, debug_crc, print_hex};
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::model::events::Event;
+use crate::kiro::model::requests::KiroRequest;
 use crate::kiro::parser::EventStreamDecoder;
 use crate::kiro::provider::KiroProvider;
 use crate::kiro::token_manager::TokenManager;
@@ -14,6 +15,21 @@ pub(crate) async fn call_stream_api() -> anyhow::Result<()> {
     // 读取 test.json 作为请求体
     let request_body = std::fs::read_to_string("test.json")?;
     println!("已加载请求体，长度: {} 字节", request_body.len());
+
+    // 解析请求体为 KiroRequest 对象
+    let request: KiroRequest = serde_json::from_str(&request_body)?;
+    println!("已解析请求对象:");
+    println!("  会话 ID: {}", request.conversation_id());
+    println!("  模型 ID: {}", request.model_id());
+    println!("  消息内容长度: {} 字符", request.current_content().len());
+    if let Some(ref task_type) = request.conversation_state.agent_task_type {
+        println!("  任务类型: {}", task_type);
+    }
+    if let Some(ref trigger_type) = request.conversation_state.chat_trigger_type {
+        println!("  触发类型: {}", trigger_type);
+    }
+    println!("  历史消息数: {}", request.conversation_state.history.len());
+    println!("  工具数量: {}", request.conversation_state.current_message.user_input_message.user_input_message_context.tools.len());
 
     // 加载凭证
     let credentials = KiroCredentials::load_default()?;
