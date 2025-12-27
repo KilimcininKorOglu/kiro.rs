@@ -1,5 +1,7 @@
 //! Anthropic API 中间件
 
+use std::sync::Arc;
+
 use axum::{
     body::Body,
     extract::State,
@@ -7,6 +9,9 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Json, Response},
 };
+use tokio::sync::Mutex;
+
+use crate::kiro::provider::KiroProvider;
 
 use super::types::ErrorResponse;
 
@@ -15,6 +20,10 @@ use super::types::ErrorResponse;
 pub struct AppState {
     /// API 密钥
     pub api_key: String,
+    /// Kiro Provider（可选，用于实际 API 调用）
+    pub kiro_provider: Option<Arc<Mutex<KiroProvider>>>,
+    /// Profile ARN（可选，用于请求）
+    pub profile_arn: Option<String>,
 }
 
 impl AppState {
@@ -22,7 +31,21 @@ impl AppState {
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
             api_key: api_key.into(),
+            kiro_provider: None,
+            profile_arn: None,
         }
+    }
+
+    /// 设置 KiroProvider
+    pub fn with_kiro_provider(mut self, provider: KiroProvider) -> Self {
+        self.kiro_provider = Some(Arc::new(Mutex::new(provider)));
+        self
+    }
+
+    /// 设置 Profile ARN
+    pub fn with_profile_arn(mut self, arn: impl Into<String>) -> Self {
+        self.profile_arn = Some(arn.into());
+        self
     }
 }
 

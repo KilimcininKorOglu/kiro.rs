@@ -1,27 +1,80 @@
 //! Anthropic API Handler 函数
 
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use std::convert::Infallible;
 
-use super::types::{CountTokensRequest, ErrorResponse, MessagesRequest};
+use axum::{
+    body::Body,
+    extract::State,
+    http::{header, StatusCode},
+    response::{IntoResponse, Json, Response},
+    Json as JsonExtractor,
+};
+use bytes::Bytes;
+use futures::{stream, Stream, StreamExt};
+use serde_json::json;
+use uuid::Uuid;
+
+use crate::kiro::model::events::Event;
+use crate::kiro::model::requests::kiro::KiroRequest;
+use crate::kiro::parser::decoder::EventStreamDecoder;
+
+use super::converter::{convert_request, ConversionError};
+use super::middleware::AppState;
+use super::stream::{SseEvent, StreamContext};
+use super::token::count_tokens as estimate_input_tokens;
+use super::types::{
+    CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse,
+};
 
 /// GET /v1/models
 ///
 /// 返回可用的模型列表
-/// 当前返回 501 Not Implemented
 pub async fn get_models() -> impl IntoResponse {
     tracing::info!("Received GET /v1/models request");
 
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ErrorResponse::not_implemented("GET /v1/models not implemented")),
-    )
+    let models = vec![
+        Model {
+            id: "claude-sonnet-4-5-20250929".to_string(),
+            object: "model".to_string(),
+            created: 1727568000,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Sonnet 4.5".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+        },
+        Model {
+            id: "claude-opus-4-5-20251101".to_string(),
+            object: "model".to_string(),
+            created: 1730419200,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Opus 4.5".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+        },
+        Model {
+            id: "claude-haiku-4-5-20251001".to_string(),
+            object: "model".to_string(),
+            created: 1727740800,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Haiku 4.5".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+        },
+    ];
+
+    Json(ModelsResponse {
+        object: "list".to_string(),
+        data: models,
+    })
 }
 
 /// POST /v1/messages
 ///
 /// 创建消息（对话）
-/// 当前返回 501 Not Implemented
-pub async fn post_messages(Json(payload): Json<MessagesRequest>) -> impl IntoResponse {
+pub async fn post_messages(
+    State(state): State<AppState>,
+    JsonExtractor(payload): JsonExtractor<MessagesRequest>,
+) -> Response {
     tracing::info!(
         model = %payload.model,
         max_tokens = %payload.max_tokens,
@@ -30,27 +83,445 @@ pub async fn post_messages(Json(payload): Json<MessagesRequest>) -> impl IntoRes
         "Received POST /v1/messages request"
     );
 
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ErrorResponse::not_implemented("POST /v1/messages not implemented")),
+    // 检查 KiroProvider 是否可用
+    let provider = match &state.kiro_provider {
+        Some(p) => p.clone(),
+        None => {
+            tracing::error!("KiroProvider 未配置");
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse::new(
+                    "service_unavailable",
+                    "Kiro API provider not configured",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    // 转换请求
+    let conversion_result = match convert_request(&payload) {
+        Ok(result) => result,
+        Err(e) => {
+            let (error_type, message) = match &e {
+                ConversionError::UnsupportedModel(model) => {
+                    ("invalid_request_error", format!("模型不支持: {}", model))
+                }
+                ConversionError::EmptyMessages => {
+                    ("invalid_request_error", "消息列表为空".to_string())
+                }
+                ConversionError::ContentParseFailed(msg) => {
+                    ("invalid_request_error", format!("内容解析失败: {}", msg))
+                }
+            };
+            tracing::warn!("请求转换失败: {}", e);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::new(error_type, message)),
+            )
+                .into_response();
+        }
+    };
+
+    // 构建 Kiro 请求
+    let kiro_request = KiroRequest {
+        conversation_state: conversion_result.conversation_state,
+        profile_arn: state.profile_arn.clone(),
+    };
+
+    let request_body = match serde_json::to_string(&kiro_request) {
+        Ok(body) => body,
+        Err(e) => {
+            tracing::error!("序列化请求失败: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::new(
+                    "internal_error",
+                    format!("序列化请求失败: {}", e),
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    tracing::debug!("Kiro request body: {}", request_body);
+
+    // 估算输入 tokens
+    let input_tokens = estimate_input_tokens_for_request(&payload);
+
+    if payload.stream {
+        // 流式响应
+        handle_stream_request(provider, &request_body, &payload.model, input_tokens).await
+    } else {
+        // 非流式响应
+        handle_non_stream_request(provider, &request_body, &payload.model, input_tokens).await
+    }
+}
+
+/// 处理流式请求
+async fn handle_stream_request(
+    provider: std::sync::Arc<tokio::sync::Mutex<crate::kiro::provider::KiroProvider>>,
+    request_body: &str,
+    model: &str,
+    input_tokens: i32,
+) -> Response {
+    // 调用 Kiro API
+    let response = {
+        let mut provider_guard = provider.lock().await;
+        match provider_guard.call_api_stream(request_body).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                tracing::error!("Kiro API 调用失败: {}", e);
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(ErrorResponse::new(
+                        "api_error",
+                        format!("上游 API 调用失败: {}", e),
+                    )),
+                )
+                    .into_response();
+            }
+        }
+    };
+
+    // 创建流处理上下文
+    let mut ctx = StreamContext::new(model, input_tokens);
+
+    // 生成初始事件
+    let initial_events = ctx.generate_initial_events();
+
+    // 创建 SSE 流
+    let stream = create_sse_stream(response, ctx, initial_events);
+
+    // 返回 SSE 响应
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .header(header::CONNECTION, "keep-alive")
+        .body(Body::from_stream(stream))
+        .unwrap()
+}
+
+/// 创建 SSE 事件流
+fn create_sse_stream(
+    response: reqwest::Response,
+    mut ctx: StreamContext,
+    initial_events: Vec<SseEvent>,
+) -> impl Stream<Item = Result<Bytes, Infallible>> {
+    // 先发送初始事件
+    let initial_stream = stream::iter(
+        initial_events
+            .into_iter()
+            .map(|e| Ok(Bytes::from(e.to_sse_string()))),
+    );
+
+    // 然后处理 Kiro 响应流
+    let body_stream = response.bytes_stream();
+
+    let processing_stream = stream::unfold(
+        (body_stream, ctx, EventStreamDecoder::new(), false),
+        |(mut body_stream, mut ctx, mut decoder, finished)| async move {
+            if finished {
+                return None;
+            }
+
+            // 尝试获取下一个 chunk
+            match body_stream.next().await {
+                Some(Ok(chunk)) => {
+                    // 解码事件
+                    decoder.feed(&chunk);
+
+                    let mut events = Vec::new();
+                    for result in decoder.decode_iter() {
+                        match result {
+                            Ok(frame) => {
+                                if let Ok(event) = Event::from_frame(frame) {
+                                    let sse_events = ctx.process_kiro_event(&event);
+                                    events.extend(sse_events);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("解码事件失败: {}", e);
+                            }
+                        }
+                    }
+
+                    // 转换为 SSE 字节流
+                    let bytes: Vec<Result<Bytes, Infallible>> = events
+                        .into_iter()
+                        .map(|e| Ok(Bytes::from(e.to_sse_string())))
+                        .collect();
+
+                    Some((stream::iter(bytes), (body_stream, ctx, decoder, false)))
+                }
+                Some(Err(e)) => {
+                    tracing::error!("读取响应流失败: {}", e);
+                    // 发送最终事件并结束
+                    let final_events = ctx.generate_final_events();
+                    let bytes: Vec<Result<Bytes, Infallible>> = final_events
+                        .into_iter()
+                        .map(|e| Ok(Bytes::from(e.to_sse_string())))
+                        .collect();
+                    Some((stream::iter(bytes), (body_stream, ctx, decoder, true)))
+                }
+                None => {
+                    // 流结束，发送最终事件
+                    let final_events = ctx.generate_final_events();
+                    let bytes: Vec<Result<Bytes, Infallible>> = final_events
+                        .into_iter()
+                        .map(|e| Ok(Bytes::from(e.to_sse_string())))
+                        .collect();
+                    Some((stream::iter(bytes), (body_stream, ctx, decoder, true)))
+                }
+            }
+        },
     )
+    .flatten();
+
+    initial_stream.chain(processing_stream)
+}
+
+/// 处理非流式请求
+async fn handle_non_stream_request(
+    provider: std::sync::Arc<tokio::sync::Mutex<crate::kiro::provider::KiroProvider>>,
+    request_body: &str,
+    model: &str,
+    input_tokens: i32,
+) -> Response {
+    // 调用 Kiro API
+    let response = {
+        let mut provider_guard = provider.lock().await;
+        match provider_guard.call_api(request_body).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                tracing::error!("Kiro API 调用失败: {}", e);
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(ErrorResponse::new(
+                        "api_error",
+                        format!("上游 API 调用失败: {}", e),
+                    )),
+                )
+                    .into_response();
+            }
+        }
+    };
+
+    // 读取响应体
+    let body_bytes = match response.bytes().await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            tracing::error!("读取响应体失败: {}", e);
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse::new(
+                    "api_error",
+                    format!("读取响应失败: {}", e),
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    // 解析事件流
+    let mut decoder = EventStreamDecoder::new();
+    decoder.feed(&body_bytes);
+
+    let mut text_content = String::new();
+    let mut tool_uses: Vec<serde_json::Value> = Vec::new();
+    let mut has_tool_use = false;
+    let mut stop_reason = "end_turn".to_string();
+
+    // 收集工具调用的增量 JSON
+    let mut tool_json_buffers: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    for result in decoder.decode_iter() {
+        match result {
+            Ok(frame) => {
+                if let Ok(event) = Event::from_frame(frame) {
+                    match event {
+                        Event::AssistantResponse(resp) => {
+                            text_content.push_str(&resp.content);
+                        }
+                        Event::ToolUse(tool_use) => {
+                            has_tool_use = true;
+
+                            // 累积工具的 JSON 输入
+                            let buffer = tool_json_buffers
+                                .entry(tool_use.tool_use_id.clone())
+                                .or_insert_with(String::new);
+                            buffer.push_str(&tool_use.input);
+
+                            // 如果是完整的工具调用，添加到列表
+                            if tool_use.stop {
+                                let input: serde_json::Value = serde_json::from_str(buffer)
+                                    .unwrap_or(serde_json::json!({}));
+
+                                tool_uses.push(json!({
+                                    "type": "tool_use",
+                                    "id": tool_use.tool_use_id,
+                                    "name": tool_use.name,
+                                    "input": input
+                                }));
+                            }
+                        }
+                        Event::Exception { exception_type, .. } => {
+                            if exception_type == "ContentLengthExceededException" {
+                                stop_reason = "max_tokens".to_string();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("解码事件失败: {}", e);
+            }
+        }
+    }
+
+    // 确定 stop_reason
+    if has_tool_use && stop_reason == "end_turn" {
+        stop_reason = "tool_use".to_string();
+    }
+
+    // 构建响应内容
+    let mut content: Vec<serde_json::Value> = Vec::new();
+
+    if !text_content.is_empty() {
+        content.push(json!({
+            "type": "text",
+            "text": text_content
+        }));
+    }
+
+    content.extend(tool_uses);
+
+    // 估算输出 tokens
+    let output_tokens = estimate_output_tokens(&content);
+
+    // 构建 Anthropic 响应
+    let response_body = json!({
+        "id": format!("msg_{}", Uuid::new_v4().to_string().replace('-', "")),
+        "type": "message",
+        "role": "assistant",
+        "content": content,
+        "model": model,
+        "stop_reason": stop_reason,
+        "stop_sequence": null,
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens
+        }
+    });
+
+    (StatusCode::OK, Json(response_body)).into_response()
+}
+
+/// 估算请求的输入 tokens
+fn estimate_input_tokens_for_request(req: &MessagesRequest) -> i32 {
+    let mut total = 0;
+
+    // 系统消息
+    if let Some(ref system) = req.system {
+        for msg in system {
+            total += estimate_input_tokens(&msg.text) as i32;
+        }
+    }
+
+    // 用户消息
+    for msg in &req.messages {
+        if let serde_json::Value::String(s) = &msg.content {
+            total += estimate_input_tokens(s) as i32;
+        } else if let serde_json::Value::Array(arr) = &msg.content {
+            for item in arr {
+                if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                    total += estimate_input_tokens(text) as i32;
+                }
+            }
+        }
+        total += 3; // 角色标记开销
+    }
+
+    // 工具定义
+    if let Some(ref tools) = req.tools {
+        total += 100; // 基础工具开销
+        for tool in tools {
+            total += estimate_input_tokens(&tool.name) as i32;
+            total += estimate_input_tokens(&tool.description) as i32;
+            total += 50; // Schema 开销
+        }
+    }
+
+    total.max(1)
+}
+
+/// 估算输出 tokens
+fn estimate_output_tokens(content: &[serde_json::Value]) -> i32 {
+    let mut total = 0;
+
+    for block in content {
+        if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+            total += estimate_input_tokens(text) as i32;
+        }
+        if block.get("type").and_then(|v| v.as_str()) == Some("tool_use") {
+            // 工具调用开销
+            total += 10; // id + name + type
+            if let Some(input) = block.get("input") {
+                let input_str = serde_json::to_string(input).unwrap_or_default();
+                total += (input_str.len() as i32 + 3) / 4;
+            }
+        }
+    }
+
+    total.max(1)
 }
 
 /// POST /v1/messages/count_tokens
 ///
 /// 计算消息的 token 数量
-/// 当前返回 501 Not Implemented
-pub async fn count_tokens(Json(payload): Json<CountTokensRequest>) -> impl IntoResponse {
+pub async fn count_tokens(JsonExtractor(payload): JsonExtractor<CountTokensRequest>) -> impl IntoResponse {
     tracing::info!(
         model = %payload.model,
         message_count = %payload.messages.len(),
         "Received POST /v1/messages/count_tokens request"
     );
 
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ErrorResponse::not_implemented(
-            "POST /v1/messages/count_tokens not implemented",
-        )),
-    )
+    let mut total_tokens: u64 = 0;
+
+    // 系统消息
+    if let Some(ref system) = payload.system {
+        for msg in system {
+            total_tokens += estimate_input_tokens(&msg.text);
+        }
+    }
+
+    // 用户消息
+    for msg in &payload.messages {
+        if let serde_json::Value::String(s) = &msg.content {
+            total_tokens += estimate_input_tokens(s);
+        } else if let serde_json::Value::Array(arr) = &msg.content {
+            for item in arr {
+                if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                    total_tokens += estimate_input_tokens(text);
+                }
+            }
+        }
+        total_tokens += 3; // 角色标记开销
+    }
+
+    // 工具定义
+    if let Some(ref tools) = payload.tools {
+        total_tokens += 100; // 基础工具开销
+        for tool in tools {
+            total_tokens += estimate_input_tokens(&tool.name);
+            total_tokens += estimate_input_tokens(&tool.description);
+            total_tokens += 50; // Schema 开销
+        }
+    }
+
+    Json(CountTokensResponse {
+        input_tokens: total_tokens.max(1) as i32,
+    })
 }

@@ -5,6 +5,8 @@ mod model;
 mod test;
 
 use kiro::model::credentials::KiroCredentials;
+use kiro::provider::KiroProvider;
+use kiro::token_manager::TokenManager;
 use model::config::Config;
 
 #[tokio::main]
@@ -37,8 +39,12 @@ async fn main() {
         std::process::exit(1);
     });
 
-    // 构建路由
-    let app = anthropic::create_router(&api_key);
+    // 创建 KiroProvider
+    let token_manager = TokenManager::new(config.clone(), credentials.clone());
+    let kiro_provider = KiroProvider::new(token_manager);
+
+    // 构建路由（从凭据获取 profile_arn）
+    let app = anthropic::create_router_with_provider(&api_key, Some(kiro_provider), credentials.profile_arn.clone());
 
     // 启动服务器
     let addr = format!("{}:{}", config.host, config.port);
