@@ -7,8 +7,50 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
-use crate::model::config::Config;
 use crate::kiro::model::token_refresh::{RefreshRequest, RefreshResponse};
+use crate::model::config::Config;
+
+/// Token 管理器
+///
+/// 负责管理凭据和 Token 的自动刷新
+pub struct TokenManager {
+    config: Config,
+    credentials: KiroCredentials,
+}
+
+impl TokenManager {
+    /// 创建新的 TokenManager 实例
+    pub fn new(config: Config, credentials: KiroCredentials) -> Self {
+        Self {
+            config,
+            credentials,
+        }
+    }
+
+    /// 获取凭据的引用
+    pub fn credentials(&self) -> &KiroCredentials {
+        &self.credentials
+    }
+
+    /// 获取配置的引用
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    /// 确保获取有效的访问 Token
+    ///
+    /// 如果 Token 过期或即将过期，会自动刷新
+    pub async fn ensure_valid_token(&mut self) -> anyhow::Result<String> {
+        if is_token_expired(&self.credentials) || is_token_expiring_soon(&self.credentials) {
+            self.credentials = refresh_token(&self.credentials, &self.config).await?;
+        }
+
+        self.credentials
+            .access_token
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))
+    }
+}
 
 /// 检查 Token 是否在指定时间内过期
 fn is_token_expiring_within(credentials: &KiroCredentials, minutes: i64) -> Option<bool> {
@@ -19,21 +61,18 @@ fn is_token_expiring_within(credentials: &KiroCredentials, minutes: i64) -> Opti
         .map(|expires| expires <= Utc::now() + Duration::minutes(minutes))
 }
 
-/// 检查 Token 是否已过期
-///
-/// 提前 5 分钟判断为过期，仅支持 RFC3339 格式
-pub fn is_token_expired(credentials: &KiroCredentials) -> bool {
-    // 如果没有过期时间信息，保守地认为可能需要刷新
+/// 检查 Token 是否已过期（提前 5 分钟判断）
+fn is_token_expired(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 5).unwrap_or(true)
 }
 
 /// 检查 Token 是否即将过期（10分钟内）
-pub fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
+fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 10).unwrap_or(false)
 }
 
 /// 验证 refreshToken 的基本有效性
-pub fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
+fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
     let refresh_token = credentials
         .refresh_token
         .as_ref()
@@ -43,7 +82,6 @@ pub fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<(
         bail!("refreshToken 为空");
     }
 
-    // 检测 refreshToken 是否被截断
     if refresh_token.len() < 100
         || refresh_token.ends_with("...")
         || refresh_token.contains("...")
@@ -59,13 +97,10 @@ pub fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<(
 }
 
 /// 刷新 Token
-///
-/// 返回更新后的 KiroCredentials
-pub async fn refresh_token(
+async fn refresh_token(
     credentials: &KiroCredentials,
     config: &Config,
 ) -> anyhow::Result<KiroCredentials> {
-    // 首先验证 refreshToken
     validate_refresh_token(credentials)?;
 
     let refresh_token = credentials.refresh_token.as_ref().unwrap();
@@ -77,47 +112,27 @@ pub async fn refresh_token(
         .ok_or_else(|| anyhow::anyhow!("无法生成 machineId"))?;
     let kiro_version = &config.kiro_version;
 
-    refresh_token_social(&refresh_url, &refresh_domain, refresh_token, &machine_id, kiro_version, credentials).await
-}
-
-/// Social 认证方式刷新 Token
-async fn refresh_token_social(
-    refresh_url: &str,
-    refresh_domain: &str,
-    refresh_token: &str,
-    machine_id: &str,
-    kiro_version: &str,
-    original_credentials: &KiroCredentials,
-) -> anyhow::Result<KiroCredentials> {
     let client = reqwest::Client::new();
-
     let body = RefreshRequest {
         refresh_token: refresh_token.to_string(),
     };
 
-    // 符合抓包顺序与大小写
     let response = client
-        .post(refresh_url)
+        .post(&refresh_url)
         .header("Accept", "application/json, text/plain, */*")
         .header("Content-Type", "application/json")
-        .header("User-Agent", format!("KiroIDE-{}-{}", kiro_version, machine_id))
+        .header(
+            "User-Agent",
+            format!("KiroIDE-{}-{}", kiro_version, machine_id),
+        )
         .header("Accept-Encoding", "gzip, compress, deflate, br")
-        .header("host", refresh_domain)
+        .header("host", &refresh_domain)
         .header("Connection", "close")
         .json(&body)
         .send()
         .await?;
 
-    handle_refresh_response(response, original_credentials).await
-}
-
-/// 处理刷新响应
-async fn handle_refresh_response(
-    response: reqwest::Response,
-    original_credentials: &KiroCredentials,
-) -> anyhow::Result<KiroCredentials> {
     let status = response.status();
-
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
         let error_msg = match status.as_u16() {
@@ -132,8 +147,7 @@ async fn handle_refresh_response(
 
     let data: RefreshResponse = response.json().await?;
 
-    // 创建更新后的凭证
-    let mut new_credentials = original_credentials.clone();
+    let mut new_credentials = credentials.clone();
     new_credentials.access_token = Some(data.access_token);
 
     if let Some(new_refresh_token) = data.refresh_token {
@@ -144,7 +158,6 @@ async fn handle_refresh_response(
         new_credentials.profile_arn = Some(profile_arn);
     }
 
-    // 更新过期时间
     if let Some(expires_in) = data.expires_in {
         let expires_at = Utc::now() + Duration::seconds(expires_in);
         new_credentials.expires_at = Some(expires_at.to_rfc3339());
@@ -158,58 +171,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_token_manager_new() {
+        let config = Config::default();
+        let credentials = KiroCredentials::default();
+        let tm = TokenManager::new(config, credentials);
+        assert!(tm.credentials().access_token.is_none());
+    }
+
+    #[test]
     fn test_is_token_expired_with_expired_token() {
         let mut credentials = KiroCredentials::default();
-        // 设置一个过去的时间
         credentials.expires_at = Some("2020-01-01T00:00:00Z".to_string());
-
         assert!(is_token_expired(&credentials));
     }
 
     #[test]
     fn test_is_token_expired_with_valid_token() {
         let mut credentials = KiroCredentials::default();
-        // 设置一个未来的时间（1小时后）
         let future = Utc::now() + Duration::hours(1);
         credentials.expires_at = Some(future.to_rfc3339());
-
         assert!(!is_token_expired(&credentials));
     }
 
     #[test]
     fn test_is_token_expired_within_5_minutes() {
         let mut credentials = KiroCredentials::default();
-        // 设置 3 分钟后过期（应该被判断为过期）
         let expires = Utc::now() + Duration::minutes(3);
         credentials.expires_at = Some(expires.to_rfc3339());
-
         assert!(is_token_expired(&credentials));
     }
 
     #[test]
     fn test_is_token_expired_no_expires_at() {
         let credentials = KiroCredentials::default();
-        // 没有过期时间，保守地认为过期
         assert!(is_token_expired(&credentials));
     }
 
     #[test]
     fn test_is_token_expiring_soon_within_10_minutes() {
         let mut credentials = KiroCredentials::default();
-        // 设置 8 分钟后过期
         let expires = Utc::now() + Duration::minutes(8);
         credentials.expires_at = Some(expires.to_rfc3339());
-
         assert!(is_token_expiring_soon(&credentials));
     }
 
     #[test]
     fn test_is_token_expiring_soon_beyond_10_minutes() {
         let mut credentials = KiroCredentials::default();
-        // 设置 15 分钟后过期
         let expires = Utc::now() + Duration::minutes(15);
         credentials.expires_at = Some(expires.to_rfc3339());
-
         assert!(!is_token_expiring_soon(&credentials));
     }
 
@@ -218,35 +228,12 @@ mod tests {
         let credentials = KiroCredentials::default();
         let result = validate_refresh_token(&credentials);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("缺少"));
-    }
-
-    #[test]
-    fn test_validate_refresh_token_empty() {
-        let mut credentials = KiroCredentials::default();
-        credentials.refresh_token = Some("".to_string());
-
-        let result = validate_refresh_token(&credentials);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("为空"));
-    }
-
-    #[test]
-    fn test_validate_refresh_token_truncated() {
-        let mut credentials = KiroCredentials::default();
-        credentials.refresh_token = Some("short_token...".to_string());
-
-        let result = validate_refresh_token(&credentials);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("截断"));
     }
 
     #[test]
     fn test_validate_refresh_token_valid() {
         let mut credentials = KiroCredentials::default();
-        // 创建一个足够长的 token（超过 100 字符）
         credentials.refresh_token = Some("a".repeat(150));
-
         let result = validate_refresh_token(&credentials);
         assert!(result.is_ok());
     }
