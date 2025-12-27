@@ -1,6 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 8990,
+  "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
   "region": "us-east-1",
   "kiroVersion": "0.8.0",
   "machineId": "如果你需要自定义机器码请将64位机器码填到这里",
