@@ -702,7 +702,34 @@ impl StreamContext {
 
     /// 生成最终事件序列
     pub fn generate_final_events(&mut self) -> Vec<SseEvent> {
-        self.state_manager.generate_final_events(self.output_tokens)
+        let mut events = Vec::new();
+
+        // Flush thinking_buffer 中的剩余内容
+        if self.thinking_enabled && !self.thinking_buffer.is_empty() {
+            if self.in_thinking_block {
+                // 如果还在 thinking 块内，发送剩余内容作为 thinking_delta
+                if let Some(thinking_index) = self.thinking_block_index {
+                    events.push(self.create_thinking_delta_event(thinking_index, &self.thinking_buffer));
+                }
+                // 关闭 thinking 块
+                if let Some(thinking_index) = self.thinking_block_index {
+                    if let Some(stop_event) = self.state_manager.handle_content_block_stop(thinking_index) {
+                        events.push(stop_event);
+                    }
+                }
+            } else {
+                // 否则发送剩余内容作为 text_delta
+                let buffer_content = self.thinking_buffer.clone();
+                if let Some(event) = self.create_text_delta_event(&buffer_content) {
+                    events.push(event);
+                }
+            }
+            self.thinking_buffer.clear();
+        }
+
+        // 生成最终事件
+        events.extend(self.state_manager.generate_final_events(self.output_tokens));
+        events
     }
 }
 
