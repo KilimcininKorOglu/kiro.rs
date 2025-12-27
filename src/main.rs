@@ -1,5 +1,6 @@
 mod kiro {
     pub mod machine_id;
+    pub mod provider;
     pub mod token_manager;
     pub mod model {
         pub mod credentials;
