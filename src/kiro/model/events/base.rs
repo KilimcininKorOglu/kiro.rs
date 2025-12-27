@@ -68,16 +68,11 @@ pub enum Event {
     /// 工具使用
     ToolUse(super::ToolUseEvent),
     /// 计费
-    Metering(super::MeteringEvent),
+    Metering(()),
     /// 上下文使用率
-    ContextUsage(super::ContextUsageEvent),
+    ContextUsage(()),
     /// 未知事件 (保留原始帧数据)
-    Unknown {
-        /// 原始事件类型字符串
-        event_type: String,
-        /// 原始 payload 数据
-        payload: Vec<u8>,
-    },
+    Unknown {},
     /// 服务端错误
     Error {
         /// 错误代码
@@ -122,17 +117,12 @@ impl Event {
                 Ok(Self::ToolUse(payload))
             }
             EventType::Metering => {
-                let payload = super::MeteringEvent::from_frame(&frame)?;
-                Ok(Self::Metering(payload))
+                Ok(Self::Metering(()))
             }
             EventType::ContextUsage => {
-                let payload = super::ContextUsageEvent::from_frame(&frame)?;
-                Ok(Self::ContextUsage(payload))
+                Ok(Self::ContextUsage(()))
             }
-            EventType::Unknown => Ok(Self::Unknown {
-                event_type: event_type_str.to_string(),
-                payload: frame.payload,
-            }),
+            EventType::Unknown => Ok(Self::Unknown {}),
         }
     }
 
