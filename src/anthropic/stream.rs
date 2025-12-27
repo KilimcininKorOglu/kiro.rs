@@ -425,23 +425,6 @@ pub struct StreamContext {
 }
 
 impl StreamContext {
-    pub fn new(model: impl Into<String>, input_tokens: i32) -> Self {
-        Self {
-            state_manager: SseStateManager::new(),
-            model: model.into(),
-            message_id: format!("msg_{}", Uuid::new_v4().to_string().replace('-', "")),
-            input_tokens,
-            output_tokens: 0,
-            tool_block_indices: HashMap::new(),
-            thinking_enabled: false,
-            thinking_buffer: String::new(),
-            in_thinking_block: false,
-            thinking_extracted: false,
-            thinking_block_index: None,
-            text_block_index: None,
-        }
-    }
-
     /// 创建启用thinking的StreamContext
     pub fn new_with_thinking(model: impl Into<String>, input_tokens: i32, thinking_enabled: bool) -> Self {
         Self {
@@ -952,17 +935,6 @@ mod tests {
         assert!(estimate_tokens("Hello") > 0);
         assert!(estimate_tokens("你好") > 0);
         assert!(estimate_tokens("Hello 你好") > 0);
-    }
-
-    #[test]
-    fn test_stream_context_initial_events() {
-        let mut ctx = StreamContext::new("claude-sonnet-4", 100);
-        let events = ctx.generate_initial_events();
-
-        // 应该有 message_start 和 content_block_start
-        assert!(events.len() >= 2);
-        assert_eq!(events[0].event, "message_start");
-        assert_eq!(events[1].event, "content_block_start");
     }
 
     #[test]
