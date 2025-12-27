@@ -94,8 +94,6 @@ pub struct MessagesRequest {
     pub system: Option<Vec<SystemMessage>>,
     pub tools: Option<Vec<Tool>>,
     pub tool_choice: Option<serde_json::Value>,
-    pub temperature: Option<f64>,
-    pub metadata: Option<HashMap<String, serde_json::Value>>,
     pub thinking: Option<Thinking>,
 }
 
