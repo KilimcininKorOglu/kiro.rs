@@ -10,7 +10,7 @@
 //! [4 bytes: message_crc32]
 //! ```
 
-use super::crc::crc32c;
+use super::crc::crc32;
 use super::error::{ParseError, ParseResult};
 use super::header::{parse_headers, Headers};
 
@@ -122,7 +122,7 @@ impl FrameParser {
         }
 
         // 验证 Prelude CRC
-        let actual_prelude_crc = crc32c(&buffer[..8]);
+        let actual_prelude_crc = crc32(&buffer[..8]);
         if actual_prelude_crc != prelude_crc {
             return Err(ParseError::PreludeCrcMismatch {
                 expected: prelude_crc,
@@ -139,7 +139,7 @@ impl FrameParser {
         ]);
 
         // 验证 Message CRC (对整个消息不含最后4字节)
-        let actual_message_crc = crc32c(&buffer[..total_length - 4]);
+        let actual_message_crc = crc32(&buffer[..total_length - 4]);
         if actual_message_crc != message_crc {
             return Err(ParseError::MessageCrcMismatch {
                 expected: message_crc,
@@ -185,7 +185,7 @@ mod tests {
         let mut buffer = vec![0u8; 16];
         buffer[0..4].copy_from_slice(&10u32.to_be_bytes()); // total_length
         buffer[4..8].copy_from_slice(&0u32.to_be_bytes()); // header_length
-        let prelude_crc = crc32c(&buffer[0..8]);
+        let prelude_crc = crc32(&buffer[0..8]);
         buffer[8..12].copy_from_slice(&prelude_crc.to_be_bytes());
 
         let result = FrameParser::parse(&buffer);
