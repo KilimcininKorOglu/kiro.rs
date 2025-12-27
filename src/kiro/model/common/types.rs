@@ -234,22 +234,6 @@ pub struct Customization {
     pub name: Option<String>,
 }
 
-impl Customization {
-    /// 创建新的定制化配置
-    pub fn new(arn: impl Into<String>) -> Self {
-        Self {
-            arn: arn.into(),
-            name: None,
-        }
-    }
-
-    /// 设置名称
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
-    }
-}
-
 /// 代码查询
 ///
 /// 代码查询信息
