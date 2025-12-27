@@ -109,7 +109,6 @@ pub struct Message {
 #[derive(Debug, Deserialize)]
 pub struct SystemMessage {
     #[serde(rename = "type")]
-    pub msg_type: String,
     pub text: String,
 }
 
