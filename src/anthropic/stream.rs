@@ -3,11 +3,7 @@
 //! 实现 Kiro → Anthropic 流式响应转换和 SSE 状态管理
 
 use std::collections::HashMap;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
-use bytes::Bytes;
-use futures::Stream;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -853,33 +849,6 @@ fn estimate_tokens(text: &str) -> i32 {
     let other_tokens = (other_count + 3) / 4;
 
     (chinese_tokens + other_tokens).max(1)
-}
-
-/// SSE 响应流
-pub struct SseResponseStream {
-    events: Vec<SseEvent>,
-    index: usize,
-}
-
-impl SseResponseStream {
-    pub fn new(events: Vec<SseEvent>) -> Self {
-        Self { events, index: 0 }
-    }
-}
-
-impl Stream for SseResponseStream {
-    type Item = Result<Bytes, std::io::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.index < self.events.len() {
-            let idx = self.index;
-            self.index += 1;
-            let bytes = Bytes::from(self.events[idx].to_sse_string());
-            Poll::Ready(Some(Ok(bytes)))
-        } else {
-            Poll::Ready(None)
-        }
-    }
 }
 
 #[cfg(test)]
