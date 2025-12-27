@@ -354,6 +354,8 @@ pub struct StreamContext {
     pub thinking_extracted: bool,
     /// thinking 块索引
     pub thinking_block_index: Option<i32>,
+    /// 文本块索引（thinking 启用时动态分配）
+    pub text_block_index: Option<i32>,
 }
 
 impl StreamContext {
@@ -370,6 +372,7 @@ impl StreamContext {
             in_thinking_block: false,
             thinking_extracted: false,
             thinking_block_index: None,
+            text_block_index: None,
         }
     }
 
@@ -387,6 +390,7 @@ impl StreamContext {
             in_thinking_block: false,
             thinking_extracted: false,
             thinking_block_index: None,
+            text_block_index: None,
         }
     }
 
@@ -411,6 +415,9 @@ impl StreamContext {
     }
 
     /// 生成初始事件序列 (message_start + 文本块 start)
+    ///
+    /// 当 thinking 启用时，不在初始化时创建文本块，而是等到实际收到内容时再创建。
+    /// 这样可以确保 thinking 块（索引 0）在文本块（索引 1）之前。
     pub fn generate_initial_events(&mut self) -> Vec<SseEvent> {
         let mut events = Vec::new();
 
@@ -420,8 +427,15 @@ impl StreamContext {
             events.push(event);
         }
 
-        // 创建初始文本块
+        // 如果启用了 thinking，不在这里创建文本块
+        // thinking 块和文本块会在 process_content_with_thinking 中按正确顺序创建
+        if self.thinking_enabled {
+            return events;
+        }
+
+        // 创建初始文本块（仅在未启用 thinking 时）
         let text_block_index = self.state_manager.next_block_index();
+        self.text_block_index = Some(text_block_index);
         let text_block_events = self.state_manager.handle_content_block_start(
             text_block_index,
             "text",
@@ -478,12 +492,14 @@ impl StreamContext {
             return self.process_content_with_thinking(content);
         }
 
-        // 发送文本增量
+        // 发送文本增量（非 thinking 模式）
+        // 使用 text_block_index，在 generate_initial_events 中已设置为 0
+        let text_index = self.text_block_index.unwrap_or(0);
         if let Some(event) = self.state_manager.handle_content_block_delta(
-            0, // 文本块索引固定为 0
+            text_index,
             json!({
                 "type": "content_block_delta",
-                "index": 0,
+                "index": text_index,
                 "delta": {
                     "type": "text_delta",
                     "text": content
@@ -510,9 +526,7 @@ impl StreamContext {
                     // 发送 <thinking> 之前的内容作为 text_delta
                     let before_thinking = self.thinking_buffer[..start_pos].to_string();
                     if !before_thinking.is_empty() {
-                        if let Some(event) = self.create_text_delta_event(&before_thinking) {
-                            events.push(event);
-                        }
+                        events.extend(self.create_text_delta_events(&before_thinking));
                     }
                     
                     // 进入 thinking 块
@@ -543,9 +557,7 @@ impl StreamContext {
                     if safe_len > 0 {
                         let safe_content = self.thinking_buffer[..safe_len].to_string();
                         if !safe_content.is_empty() {
-                            if let Some(event) = self.create_text_delta_event(&safe_content) {
-                                events.push(event);
-                            }
+                            events.extend(self.create_text_delta_events(&safe_content));
                         }
                         self.thinking_buffer = self.thinking_buffer[safe_len..].to_string();
                     }
@@ -598,9 +610,7 @@ impl StreamContext {
                 if !self.thinking_buffer.is_empty() {
                     let remaining = self.thinking_buffer.clone();
                     self.thinking_buffer.clear();
-                    if let Some(event) = self.create_text_delta_event(&remaining) {
-                        events.push(event);
-                    }
+                    events.extend(self.create_text_delta_events(&remaining));
                 }
                 break;
             }
@@ -610,18 +620,56 @@ impl StreamContext {
     }
 
     /// 创建 text_delta 事件
-    fn create_text_delta_event(&mut self, text: &str) -> Option<SseEvent> {
-        self.state_manager.handle_content_block_delta(
-            0, // 文本块索引固定为 0
+    ///
+    /// 如果文本块尚未创建，会先创建文本块。
+    /// 当 thinking 启用时，文本块索引为 1（thinking 块为 0）；
+    /// 否则文本块索引为 0。
+    ///
+    /// 返回值包含可能的 content_block_start 事件和 content_block_delta 事件。
+    fn create_text_delta_events(&mut self, text: &str) -> Vec<SseEvent> {
+        let mut events = Vec::new();
+
+        // 获取或创建文本块索引
+        let text_index = if let Some(idx) = self.text_block_index {
+            idx
+        } else {
+            // 文本块尚未创建，需要先创建
+            let idx = self.state_manager.next_block_index();
+            self.text_block_index = Some(idx);
+
+            // 发送 content_block_start 事件
+            let start_events = self.state_manager.handle_content_block_start(
+                idx,
+                "text",
+                json!({
+                    "type": "content_block_start",
+                    "index": idx,
+                    "content_block": {
+                        "type": "text",
+                        "text": ""
+                    }
+                }),
+            );
+            events.extend(start_events);
+            idx
+        };
+
+        // 发送 content_block_delta 事件
+        if let Some(delta_event) = self.state_manager.handle_content_block_delta(
+            text_index,
             json!({
                 "type": "content_block_delta",
-                "index": 0,
+                "index": text_index,
                 "delta": {
                     "type": "text_delta",
                     "text": text
                 }
             }),
-        )
+        ) {
+            events.push(delta_event);
+        }
+
+        events
     }
 
     /// 创建 thinking_delta 事件
@@ -726,9 +774,7 @@ impl StreamContext {
             } else {
                 // 否则发送剩余内容作为 text_delta
                 let buffer_content = self.thinking_buffer.clone();
-                if let Some(event) = self.create_text_delta_event(&buffer_content) {
-                    events.push(event);
-                }
+                events.extend(self.create_text_delta_events(&buffer_content));
             }
             self.thinking_buffer.clear();
         }
