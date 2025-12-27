@@ -28,26 +28,6 @@ impl MessageStatus {
             Self::Error => "ERROR",
         }
     }
-
-    /// 从字符串解析
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "COMPLETED" => Some(Self::Completed),
-            "IN_PROGRESS" => Some(Self::InProgress),
-            "ERROR" => Some(Self::Error),
-            _ => None,
-        }
-    }
-
-    /// 判断是否已完成
-    pub fn is_completed(&self) -> bool {
-        matches!(self, Self::Completed)
-    }
-
-    /// 判断是否出错
-    pub fn is_error(&self) -> bool {
-        matches!(self, Self::Error)
-    }
 }
 
 impl Default for MessageStatus {
@@ -97,20 +77,6 @@ impl UserIntent {
             Self::ExplainLineByLine => "EXPLAIN_LINE_BY_LINE",
         }
     }
-
-    /// 从字符串解析
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "EXPLAIN_CODE_SELECTION" => Some(Self::ExplainCodeSelection),
-            "SUGGEST_ALTERNATE_IMPLEMENTATION" => Some(Self::SuggestAlternateImplementation),
-            "APPLY_COMMON_BEST_PRACTICES" => Some(Self::ApplyCommonBestPractices),
-            "IMPROVE_CODE" => Some(Self::ImproveCode),
-            "SHOW_EXAMPLES" => Some(Self::ShowExamples),
-            "CITE_SOURCES" => Some(Self::CiteSources),
-            "EXPLAIN_LINE_BY_LINE" => Some(Self::ExplainLineByLine),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Display for UserIntent {
@@ -143,21 +109,6 @@ impl ContentType {
             Self::Plain => "text/plain",
             Self::Json => "application/json",
         }
-    }
-
-    /// 从 MIME 类型字符串解析
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "text/markdown" => Some(Self::Markdown),
-            "text/plain" => Some(Self::Plain),
-            "application/json" => Some(Self::Json),
-            _ => None,
-        }
-    }
-
-    /// 判断是否为 Markdown
-    pub fn is_markdown(&self) -> bool {
-        matches!(self, Self::Markdown)
     }
 }
 
