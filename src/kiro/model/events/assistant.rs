@@ -11,7 +11,7 @@ use crate::kiro::model::common::{
 use crate::kiro::parser::error::ParseResult;
 use crate::kiro::parser::frame::Frame;
 
-use super::base::{EventPayload, EventType};
+use super::base::EventPayload;
 
 /// 助手响应事件
 ///

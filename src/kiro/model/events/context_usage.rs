@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::kiro::parser::error::ParseResult;
 use crate::kiro::parser::frame::Frame;
 
-use super::base::{EventPayload, EventType};
+use super::base::EventPayload;
 
 /// 上下文使用率事件
 ///
@@ -27,11 +27,6 @@ impl EventPayload for ContextUsageEvent {
 }
 
 impl ContextUsageEvent {
-    /// 获取上下文使用百分比
-    pub fn percentage(&self) -> f64 {
-        self.context_usage_percentage
-    }
-
     /// 获取格式化的百分比字符串
     pub fn formatted_percentage(&self) -> String {
         format!("{:.2}%", self.context_usage_percentage)
@@ -65,13 +60,7 @@ impl std::fmt::Display for ContextUsageEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_deserialize() {
-        let json = r#"{"contextUsagePercentage": 9.177999496459961}"#;
-        let event: ContextUsageEvent = serde_json::from_str(json).unwrap();
-        assert!((event.percentage() - 9.178).abs() < 0.01);
-    }
+    
 
     #[test]
     fn test_formatted_percentage() {
