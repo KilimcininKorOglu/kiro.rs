@@ -1,8 +1,6 @@
 mod anthropic;
-mod debug;
 mod kiro;
 mod model;
-mod test;
 
 use kiro::model::credentials::KiroCredentials;
 use kiro::provider::KiroProvider;
