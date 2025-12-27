@@ -404,7 +404,7 @@ impl StreamContext {
                 "stop_sequence": null,
                 "usage": {
                     "input_tokens": self.input_tokens,
-                    "output_tokens": 0
+                    "output_tokens": 1
                 }
             }
         })
@@ -565,9 +565,12 @@ impl StreamContext {
                     // 结束 thinking 块
                     self.in_thinking_block = false;
                     self.thinking_extracted = true;
-                    
-                    // 发送 content_block_stop 事件
+
+                    // 发送空的 thinking_delta 事件，然后发送 content_block_stop 事件
                     if let Some(thinking_index) = self.thinking_block_index {
+                        // 先发送空的 thinking_delta
+                        events.push(self.create_thinking_delta_event(thinking_index, ""));
+                        // 再发送 content_block_stop
                         if let Some(stop_event) = self.state_manager.handle_content_block_stop(thinking_index) {
                             events.push(stop_event);
                         }
@@ -711,8 +714,11 @@ impl StreamContext {
                 if let Some(thinking_index) = self.thinking_block_index {
                     events.push(self.create_thinking_delta_event(thinking_index, &self.thinking_buffer));
                 }
-                // 关闭 thinking 块
+                // 关闭 thinking 块：先发送空的 thinking_delta，再发送 content_block_stop
                 if let Some(thinking_index) = self.thinking_block_index {
+                    // 先发送空的 thinking_delta
+                    events.push(self.create_thinking_delta_event(thinking_index, ""));
+                    // 再发送 content_block_stop
                     if let Some(stop_event) = self.state_manager.handle_content_block_stop(thinking_index) {
                         events.push(stop_event);
                     }
