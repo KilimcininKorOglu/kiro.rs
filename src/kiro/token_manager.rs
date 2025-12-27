@@ -43,6 +43,11 @@ impl TokenManager {
     pub async fn ensure_valid_token(&mut self) -> anyhow::Result<String> {
         if is_token_expired(&self.credentials) || is_token_expiring_soon(&self.credentials) {
             self.credentials = refresh_token(&self.credentials, &self.config).await?;
+
+            // 刷新后再次检查 token 时间有效性
+            if is_token_expired(&self.credentials) {
+                anyhow::bail!("刷新后的 Token 仍然无效或已过期");
+            }
         }
 
         self.credentials
