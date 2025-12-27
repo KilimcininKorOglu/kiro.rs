@@ -2,13 +2,18 @@ mod anthropic;
 mod kiro;
 mod model;
 
+use clap::Parser;
 use kiro::model::credentials::KiroCredentials;
 use kiro::provider::KiroProvider;
 use kiro::token_manager::TokenManager;
 use model::config::Config;
+use model::arg::Args;
 
 #[tokio::main]
 async fn main() {
+    // 解析命令行参数
+    let args = Args::parse();
+
     // 初始化日志
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -18,13 +23,15 @@ async fn main() {
         .init();
 
     // 加载配置
-    let config = Config::load_default().unwrap_or_else(|e| {
+    let config_path = args.config.unwrap_or_else(|| Config::default_config_path().to_string());
+    let config = Config::load(&config_path).unwrap_or_else(|e| {
         tracing::error!("加载配置失败: {}", e);
         std::process::exit(1);
     });
 
     // 加载凭证
-    let credentials = KiroCredentials::load_default().unwrap_or_else(|e| {
+    let credentials_path = args.credentials.unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
+    let credentials = KiroCredentials::load(&credentials_path).unwrap_or_else(|e| {
         tracing::error!("加载凭证失败: {}", e);
         std::process::exit(1);
     });
