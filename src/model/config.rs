@@ -89,9 +89,4 @@ impl Config {
         let config: Config = serde_json::from_str(&content)?;
         Ok(config)
     }
-
-    /// 从默认路径加载配置
-    pub fn load_default() -> anyhow::Result<Self> {
-        Self::load(Self::default_config_path())
-    }
 }
