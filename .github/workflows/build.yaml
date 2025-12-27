@@ -63,5 +63,5 @@ jobs:
           if-no-files-found: error
           compression-level: 6
           path: |
-            target/release/kiro-rs
-            target/release/kiro-rs.exe
+            target/${{ matrix.target }}/release/kiro-rs
+            target/${{ matrix.target }}/release/kiro-rs.exe
