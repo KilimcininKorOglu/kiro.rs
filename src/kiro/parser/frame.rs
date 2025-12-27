@@ -43,26 +43,6 @@ impl Frame {
         self.headers.event_type()
     }
 
-    /// 获取内容类型
-    pub fn content_type(&self) -> Option<&str> {
-        self.headers.content_type()
-    }
-
-    /// 判断是否为事件消息
-    pub fn is_event(&self) -> bool {
-        self.message_type() == Some("event")
-    }
-
-    /// 判断是否为错误消息
-    pub fn is_error(&self) -> bool {
-        self.message_type() == Some("error")
-    }
-
-    /// 判断是否为异常消息
-    pub fn is_exception(&self) -> bool {
-        self.message_type() == Some("exception")
-    }
-
     /// 将 payload 解析为 JSON
     pub fn payload_as_json<T: serde::de::DeserializeOwned>(&self) -> ParseResult<T> {
         serde_json::from_slice(&self.payload).map_err(ParseError::PayloadDeserialize)
