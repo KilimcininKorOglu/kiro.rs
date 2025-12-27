@@ -108,11 +108,6 @@ impl Headers {
         self.get_string(":event-type")
     }
 
-    /// 获取内容类型 (:content-type)
-    pub fn content_type(&self) -> Option<&str> {
-        self.get_string(":content-type")
-    }
-
     /// 获取异常类型 (:exception-type)
     pub fn exception_type(&self) -> Option<&str> {
         self.get_string(":exception-type")
@@ -121,26 +116,6 @@ impl Headers {
     /// 获取错误代码 (:error-code)
     pub fn error_code(&self) -> Option<&str> {
         self.get_string(":error-code")
-    }
-
-    /// 获取错误消息 (:error-message)
-    pub fn error_message(&self) -> Option<&str> {
-        self.get_string(":error-message")
-    }
-
-    /// 检查是否为空
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-
-    /// 获取头部数量
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    /// 迭代所有头部
-    pub fn iter(&self) -> impl Iterator<Item = (&String, &HeaderValue)> {
-        self.inner.iter()
     }
 }
 
