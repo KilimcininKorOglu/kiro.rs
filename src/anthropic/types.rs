@@ -30,11 +30,6 @@ impl ErrorResponse {
         }
     }
 
-    /// 创建 Not Implemented 错误响应
-    pub fn not_implemented(message: impl Into<String>) -> Self {
-        Self::new("not_implemented", message)
-    }
-
     /// 创建认证错误响应
     pub fn authentication_error() -> Self {
         Self::new("authentication_error", "Invalid API key")
