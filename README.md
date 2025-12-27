@@ -33,13 +33,14 @@ cargo build --release
 
 ```json
 {
-  "host": "127.0.0.1",
-  "port": 8990,
-  "apiKey": "sk-your-custom-api-key",
-  "region": "us-east-1",
-  "kiroVersion": "0.8.0",
-  "systemVersion": "darwin#24.6.0",
-  "nodeVersion": "22.21.1"
+   "host": "127.0.0.1",
+   "port": 8990,
+   "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
+   "region": "us-east-1",
+   "kiroVersion": "0.8.0",
+   "machineId": "如果你需要自定义机器码请将64位机器码填到这里",  // 不是标准格式会自动忽略, 自动生成
+   "systemVersion": "darwin#24.6.0",
+   "nodeVersion": "22.21.1"
 }
 ```
 
@@ -51,7 +52,7 @@ cargo build --release
 {
   "accessToken": "your-access-token",
   "refreshToken": "your-refresh-token",
-  "profileArn": "arn:aws:sso::123456789:profile/xxx",  // 登录时返回
+  "profileArn": "arn:aws:codewhisperer:us-east-1:{12位数字}:profile/{12位大写字母数字字符串}",  // 登录时返回
   "expiresAt": "2024-01-01T00:00:00Z",
   "authMethod": "social",
   "provider": "Google"
