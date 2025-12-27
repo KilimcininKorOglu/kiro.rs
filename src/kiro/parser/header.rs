@@ -67,26 +67,6 @@ impl HeaderValue {
             _ => None,
         }
     }
-
-    /// 尝试获取整数值
-    pub fn as_i64(&self) -> Option<i64> {
-        match self {
-            Self::Byte(v) => Some(*v as i64),
-            Self::Short(v) => Some(*v as i64),
-            Self::Integer(v) => Some(*v as i64),
-            Self::Long(v) => Some(*v),
-            Self::Timestamp(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// 尝试获取字节数组
-    pub fn as_bytes(&self) -> Option<&[u8]> {
-        match self {
-            Self::ByteArray(v) => Some(v),
-            _ => None,
-        }
-    }
 }
 
 /// 消息头部集合
