@@ -56,9 +56,6 @@ impl std::fmt::Display for EventType {
 pub trait EventPayload: Sized {
     /// 从帧解析事件负载
     fn from_frame(frame: &Frame) -> ParseResult<Self>;
-
-    /// 获取事件类型
-    fn event_type() -> EventType;
 }
 
 /// 统一事件枚举

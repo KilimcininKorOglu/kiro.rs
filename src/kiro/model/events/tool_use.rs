@@ -31,10 +31,6 @@ impl EventPayload for ToolUseEvent {
     fn from_frame(frame: &Frame) -> ParseResult<Self> {
         frame.payload_as_json()
     }
-
-    fn event_type() -> EventType {
-        EventType::ToolUse
-    }
 }
 
 impl ToolUseEvent {
