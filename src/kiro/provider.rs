@@ -54,12 +54,12 @@ impl KiroProvider {
     }
 
     /// 构建请求头
-    fn build_headers(&self, token: &str) -> HeaderMap {
+    fn build_headers(&self, token: &str) -> anyhow::Result<HeaderMap> {
         let credentials = self.token_manager.credentials();
         let config = self.token_manager.config();
 
         let machine_id = machine_id::generate_from_credentials(credentials, config)
-            .unwrap_or_else(|| "unknown".to_string());
+            .ok_or_else(|| anyhow::anyhow!("无法生成 machine_id，请检查凭证配置"))?;
 
         let kiro_version = &config.kiro_version;
         let os_name = &config.system_version;
@@ -103,7 +103,7 @@ impl KiroProvider {
         );
         headers.insert(CONNECTION, HeaderValue::from_static("close"));
 
-        headers
+        Ok(headers)
     }
 
     /// 发送非流式 API 请求
@@ -116,7 +116,7 @@ impl KiroProvider {
     pub async fn call_api(&mut self, request_body: &str) -> anyhow::Result<reqwest::Response> {
         let token = self.token_manager.ensure_valid_token().await?;
         let url = self.base_url();
-        let headers = self.build_headers(&token);
+        let headers = self.build_headers(&token)?;
 
         let response = self
             .client
@@ -148,7 +148,7 @@ impl KiroProvider {
     ) -> anyhow::Result<reqwest::Response> {
         let token = self.token_manager.ensure_valid_token().await?;
         let url = self.base_url();
-        let headers = self.build_headers(&token);
+        let headers = self.build_headers(&token)?;
 
         let response = self
             .client
@@ -206,7 +206,7 @@ mod tests {
 
         let tm = TokenManager::new(config, credentials);
         let provider = KiroProvider::new(tm);
-        let headers = provider.build_headers("test_token");
+        let headers = provider.build_headers("test_token").unwrap();
 
         assert_eq!(headers.get(CONTENT_TYPE).unwrap(), "application/json");
         assert_eq!(
