@@ -32,12 +32,24 @@ use super::conversation::ConversationState;
 pub struct KiroRequest {
     /// 对话状态
     pub conversation_state: ConversationState,
+    /// Profile ARN（可选）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_arn: Option<String>,
 }
 
 impl KiroRequest {
     /// 创建新的请求
     pub fn new(conversation_state: ConversationState) -> Self {
-        Self { conversation_state }
+        Self {
+            conversation_state,
+            profile_arn: None,
+        }
+    }
+
+    /// 设置 Profile ARN
+    pub fn with_profile_arn(mut self, arn: impl Into<String>) -> Self {
+        self.profile_arn = Some(arn.into());
+        self
     }
 
     /// 序列化为 JSON 字符串
