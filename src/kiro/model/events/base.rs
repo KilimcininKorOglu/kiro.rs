@@ -165,61 +165,6 @@ impl Event {
             message,
         })
     }
-
-    /// 获取事件类型
-    pub fn event_type(&self) -> EventType {
-        match self {
-            Self::AssistantResponse(_) => EventType::AssistantResponse,
-            Self::ToolUse(_) => EventType::ToolUse,
-            Self::Metering(_) => EventType::Metering,
-            Self::ContextUsage(_) => EventType::ContextUsage,
-            Self::Unknown { .. } => EventType::Unknown,
-            Self::Error { .. } => EventType::Unknown,
-            Self::Exception { .. } => EventType::Unknown,
-        }
-    }
-
-    /// 判断是否为错误事件
-    pub fn is_error(&self) -> bool {
-        matches!(self, Self::Error { .. })
-    }
-
-    /// 判断是否为异常事件
-    pub fn is_exception(&self) -> bool {
-        matches!(self, Self::Exception { .. })
-    }
-
-    /// 尝试获取助手响应事件
-    pub fn as_assistant_response(&self) -> Option<&super::AssistantResponseEvent> {
-        match self {
-            Self::AssistantResponse(e) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// 尝试获取工具使用事件
-    pub fn as_tool_use(&self) -> Option<&super::ToolUseEvent> {
-        match self {
-            Self::ToolUse(e) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// 尝试获取计费事件
-    pub fn as_metering(&self) -> Option<&super::MeteringEvent> {
-        match self {
-            Self::Metering(e) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// 尝试获取上下文使用率事件
-    pub fn as_context_usage(&self) -> Option<&super::ContextUsageEvent> {
-        match self {
-            Self::ContextUsage(e) => Some(e),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
