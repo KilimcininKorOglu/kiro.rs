@@ -1,21 +1,21 @@
 //! CRC32 校验实现
 //!
-//! AWS Event Stream 使用 CRC32C (Castagnoli/ISCSI) 多项式
+//! AWS Event Stream 使用 CRC32 (ISO-HDLC/以太网/ZIP 标准)
 
-use crc::{Crc, CRC_32_ISCSI};
+use crc::{Crc, CRC_32_ISO_HDLC};
 
-/// CRC32C 计算器实例
-const CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
+/// CRC32 计算器实例
+const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
-/// 计算 CRC32C 校验和
+/// 计算 CRC32 校验和
 ///
 /// # Arguments
 /// * `data` - 要计算校验和的数据
 ///
 /// # Returns
-/// CRC32C 校验和值
+/// CRC32 校验和值
 pub fn crc32c(data: &[u8]) -> u32 {
-    CRC32C.checksum(data)
+    CRC32.checksum(data)
 }
 
 /// 验证 CRC32C 校验和
@@ -42,9 +42,9 @@ mod tests {
 
     #[test]
     fn test_crc32c_known_value() {
-        // "123456789" 的 CRC32C 值是 0xE3069283
+        // "123456789" 的 CRC32 (ISO-HDLC) 值是 0xCBF43926
         let data = b"123456789";
-        assert_eq!(crc32c(data), 0xE3069283);
+        assert_eq!(crc32c(data), 0xCBF43926);
     }
 
     #[test]
