@@ -9,7 +9,7 @@ mod metering;
 mod tool_use;
 
 pub use assistant::AssistantResponseEvent;
-pub use base::{Event, EventPayload, EventType};
+pub use base::{Event};
 pub use context_usage::ContextUsageEvent;
 pub use metering::MeteringEvent;
 pub use tool_use::ToolUseEvent;

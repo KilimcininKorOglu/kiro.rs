@@ -8,6 +8,6 @@ pub mod types;
 // 重新导出常用类型
 pub use enums::{ContentType, MessageStatus, UserIntent};
 pub use types::{
-    CodeQuery, ContentSpan, Customization, FollowupPrompt, MostRelevantMissedAlternative,
+    CodeQuery, Customization, FollowupPrompt,
     ProgrammingLanguage, Reference, SupplementaryWebLink,
 };

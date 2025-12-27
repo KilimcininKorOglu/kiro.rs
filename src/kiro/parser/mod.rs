@@ -9,7 +9,3 @@ pub mod error;
 pub mod frame;
 pub mod header;
 
-pub use decoder::{DecoderState, EventStreamDecoder};
-pub use error::{ParseError, ParseResult};
-pub use frame::Frame;
-pub use header::{HeaderValue, Headers};
