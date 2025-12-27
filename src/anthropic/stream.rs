@@ -32,6 +32,112 @@ fn find_char_boundary(s: &str, target: usize) -> usize {
     pos
 }
 
+/// 需要跳过的包裹字符
+///
+/// 当 thinking 标签被这些字符包裹时，认为是在引用标签而非真正的标签：
+/// - 反引号 (`)：行内代码
+/// - 双引号 (")：字符串
+/// - 单引号 (')：字符串
+const QUOTE_CHARS: &[u8] = &[
+    b'`', b'"', b'\'', b'\\', b'#', b'!', b'@', b'$', b'%', b'^', b'&', b'*', b'(', b')', b'-',
+    b'_', b'=', b'+', b'[', b']', b'{', b'}', b';', b':', b'<', b'>', b',', b'.', b'?', b'/'
+];
+
+/// 检查指定位置的字符是否是引用字符
+fn is_quote_char(buffer: &str, pos: usize) -> bool {
+    buffer
+        .as_bytes()
+        .get(pos)
+        .map(|c| QUOTE_CHARS.contains(c))
+        .unwrap_or(false)
+}
+
+/// 查找真正的 thinking 结束标签（不被引用字符包裹，且后面有双换行符）
+///
+/// 当模型在思考过程中提到 `</thinking>` 时，通常会用反引号、引号等包裹，
+/// 或者在同一行有其他内容（如"关于 </thinking> 标签"）。
+/// 这个函数会跳过这些情况，只返回真正的结束标签位置。
+///
+/// 跳过的情况：
+/// - 被引用字符包裹（反引号、引号等）
+/// - 后面没有双换行符（真正的结束标签后面会有 `\n\n`）
+/// - 标签在缓冲区末尾（流式处理时需要等待更多内容）
+///
+/// # 参数
+/// - `buffer`: 要搜索的字符串
+///
+/// # 返回值
+/// - `Some(pos)`: 真正的结束标签的起始位置
+/// - `None`: 没有找到真正的结束标签
+fn find_real_thinking_end_tag(buffer: &str) -> Option<usize> {
+    const TAG: &str = "</thinking>";
+    let mut search_start = 0;
+
+    while let Some(pos) = buffer[search_start..].find(TAG) {
+        let absolute_pos = search_start + pos;
+
+        // 检查前面是否有引用字符
+        let has_quote_before = absolute_pos > 0 && is_quote_char(buffer, absolute_pos - 1);
+
+        // 检查后面是否有引用字符
+        let after_pos = absolute_pos + TAG.len();
+        let has_quote_after = is_quote_char(buffer, after_pos);
+
+        // 如果被引用字符包裹，跳过
+        if has_quote_before || has_quote_after {
+            search_start = absolute_pos + 1;
+            continue;
+        }
+
+        // 检查后面的内容
+        let after_content = &buffer[after_pos..];
+
+        // 如果标签后面内容不足以判断是否有双换行符，等待更多内容
+        if after_content.len() < 2 {
+            return None;
+        }
+
+        // 真正的 thinking 结束标签后面会有双换行符 `\n\n`
+        if after_content.starts_with("\n\n") {
+            return Some(absolute_pos);
+        }
+
+        // 不是双换行符，跳过继续搜索
+        search_start = absolute_pos + 1;
+    }
+
+    None
+}
+
+/// 查找真正的 thinking 开始标签（不被引用字符包裹）
+///
+/// 与 `find_real_thinking_end_tag` 类似，跳过被引用字符包裹的开始标签。
+fn find_real_thinking_start_tag(buffer: &str) -> Option<usize> {
+    const TAG: &str = "<thinking>";
+    let mut search_start = 0;
+
+    while let Some(pos) = buffer[search_start..].find(TAG) {
+        let absolute_pos = search_start + pos;
+
+        // 检查前面是否有引用字符
+        let has_quote_before = absolute_pos > 0 && is_quote_char(buffer, absolute_pos - 1);
+
+        // 检查后面是否有引用字符
+        let after_pos = absolute_pos + TAG.len();
+        let has_quote_after = is_quote_char(buffer, after_pos);
+
+        // 如果不被引用字符包裹，则是真正的开始标签
+        if !has_quote_before && !has_quote_after {
+            return Some(absolute_pos);
+        }
+
+        // 继续搜索下一个匹配
+        search_start = absolute_pos + 1;
+    }
+
+    None
+}
+
 /// SSE 事件
 #[derive(Debug, Clone)]
 pub struct SseEvent {
@@ -521,8 +627,8 @@ impl StreamContext {
 
         loop {
             if !self.in_thinking_block && !self.thinking_extracted {
-                // 查找 <thinking> 开始标签
-                if let Some(start_pos) = self.thinking_buffer.find("<thinking>") {
+                // 查找 <thinking> 开始标签（跳过被反引号包裹的）
+                if let Some(start_pos) = find_real_thinking_start_tag(&self.thinking_buffer) {
                     // 发送 <thinking> 之前的内容作为 text_delta
                     let before_thinking = self.thinking_buffer[..start_pos].to_string();
                     if !before_thinking.is_empty() {
@@ -564,8 +670,8 @@ impl StreamContext {
                     break;
                 }
             } else if self.in_thinking_block {
-                // 在 thinking 块内，查找 </thinking> 结束标签
-                if let Some(end_pos) = self.thinking_buffer.find("</thinking>") {
+                // 在 thinking 块内，查找 </thinking> 结束标签（跳过被反引号包裹的）
+                if let Some(end_pos) = find_real_thinking_end_tag(&self.thinking_buffer) {
                     // 提取 thinking 内容
                     let thinking_content = self.thinking_buffer[..end_pos].to_string();
                     if !thinking_content.is_empty() {
@@ -898,4 +1004,129 @@ mod tests {
         assert_eq!(events[0].event, "message_start");
         assert_eq!(events[1].event, "content_block_start");
     }
+    
+    #[test]
+    fn test_find_real_thinking_start_tag_basic() {
+        // 基本情况：正常的开始标签
+        assert_eq!(find_real_thinking_start_tag("<thinking>"), Some(0));
+        assert_eq!(find_real_thinking_start_tag("prefix<thinking>"), Some(6));
+    }
+
+    #[test]
+    fn test_find_real_thinking_start_tag_with_backticks() {
+        // 被反引号包裹的应该被跳过
+        assert_eq!(find_real_thinking_start_tag("`<thinking>`"), None);
+        assert_eq!(
+            find_real_thinking_start_tag("use `<thinking>` tag"),
+            None
+        );
+
+        // 先有被包裹的，后有真正的开始标签
+        assert_eq!(
+            find_real_thinking_start_tag("about `<thinking>` tag<thinking>content"),
+            Some(22)
+        );
+    }
+
+    #[test]
+    fn test_find_real_thinking_start_tag_with_quotes() {
+        // 被双引号包裹的应该被跳过
+        assert_eq!(find_real_thinking_start_tag("\"<thinking>\""), None);
+        assert_eq!(
+            find_real_thinking_start_tag("the \"<thinking>\" tag"),
+            None
+        );
+
+        // 被单引号包裹的应该被跳过
+        assert_eq!(find_real_thinking_start_tag("'<thinking>'"), None);
+
+        // 混合情况
+        assert_eq!(
+            find_real_thinking_start_tag("about \"<thinking>\" and '<thinking>' then<thinking>"),
+            Some(40)
+        );
+    }
+
+    #[test]
+    fn test_find_real_thinking_end_tag_basic() {
+        // 基本情况：正常的结束标签后面有双换行符
+        assert_eq!(find_real_thinking_end_tag("</thinking>\n\n"), Some(0));
+        assert_eq!(find_real_thinking_end_tag("content</thinking>\n\n"), Some(7));
+        assert_eq!(
+            find_real_thinking_end_tag("some text</thinking>\n\nmore text"),
+            Some(9)
+        );
+
+        // 没有双换行符的情况
+        assert_eq!(find_real_thinking_end_tag("</thinking>"), None);
+        assert_eq!(find_real_thinking_end_tag("</thinking>\n"), None);
+        assert_eq!(find_real_thinking_end_tag("</thinking> more"), None);
+    }
+
+    #[test]
+    fn test_find_real_thinking_end_tag_with_backticks() {
+        // 被反引号包裹的应该被跳过
+        assert_eq!(find_real_thinking_end_tag("`</thinking>`\n\n"), None);
+        assert_eq!(
+            find_real_thinking_end_tag("mention `</thinking>` in code\n\n"),
+            None
+        );
+
+        // 只有前面有反引号
+        assert_eq!(find_real_thinking_end_tag("`</thinking>\n\n"), None);
+
+        // 只有后面有反引号
+        assert_eq!(find_real_thinking_end_tag("</thinking>`\n\n"), None);
+    }
+
+    #[test]
+    fn test_find_real_thinking_end_tag_with_quotes() {
+        // 被双引号包裹的应该被跳过
+        assert_eq!(find_real_thinking_end_tag("\"</thinking>\"\n\n"), None);
+        assert_eq!(
+            find_real_thinking_end_tag("the string \"</thinking>\" is a tag\n\n"),
+            None
+        );
+
+        // 被单引号包裹的应该被跳过
+        assert_eq!(find_real_thinking_end_tag("'</thinking>'\n\n"), None);
+        assert_eq!(
+            find_real_thinking_end_tag("use '</thinking>' as marker\n\n"),
+            None
+        );
+
+        // 混合情况：双引号包裹后有真正的标签
+        assert_eq!(
+            find_real_thinking_end_tag("about \"</thinking>\" tag</thinking>\n\n"),
+            Some(23)
+        );
+
+        // 混合情况：单引号包裹后有真正的标签
+        assert_eq!(
+            find_real_thinking_end_tag("about '</thinking>' tag</thinking>\n\n"),
+            Some(23)
+        );
+    }
+
+    #[test]
+    fn test_find_real_thinking_end_tag_mixed() {
+        // 先有被包裹的，后有真正的结束标签
+        assert_eq!(
+            find_real_thinking_end_tag("discussing `</thinking>` tag</thinking>\n\n"),
+            Some(28)
+        );
+
+        // 多个被包裹的，最后一个是真正的
+        assert_eq!(
+            find_real_thinking_end_tag("`</thinking>` and `</thinking>` done</thinking>\n\n"),
+            Some(36)
+        );
+
+        // 多种引用字符混合
+        assert_eq!(
+            find_real_thinking_end_tag("`</thinking>` and \"</thinking>\" and '</thinking>' done</thinking>\n\n"),
+            Some(54)
+        );
+    }
+
 }
