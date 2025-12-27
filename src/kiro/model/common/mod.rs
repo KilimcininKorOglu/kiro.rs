@@ -1,13 +1,4 @@
 //! 共享类型模块
 //!
-//! 包含枚举类型和辅助结构体，供请求和响应类型共享使用
-
-pub mod enums;
-pub mod types;
-
-// 重新导出常用类型
-pub use enums::{ContentType, MessageStatus, UserIntent};
-pub use types::{
-    CodeQuery, Customization, FollowupPrompt,
-    ProgrammingLanguage, Reference, SupplementaryWebLink,
-};
+//! 此模块已简化，移除了未使用的类型定义。
+//! 如果将来需要扩展，可以在此添加新的共享类型。
