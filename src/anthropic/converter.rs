@@ -36,9 +36,7 @@ pub fn map_model(model: &str) -> Option<String> {
 #[derive(Debug)]
 pub struct ConversionResult {
     /// 转换后的 Kiro 请求
-    pub conversation_state: ConversationState,
-    /// 原始请求是否为流式
-    pub stream: bool,
+    pub conversation_state: ConversationState
 }
 
 /// 转换错误
@@ -123,8 +121,7 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
         .with_history(history);
 
     Ok(ConversionResult {
-        conversation_state,
-        stream: req.stream,
+        conversation_state
     })
 }
 
