@@ -347,34 +347,6 @@ impl SseStateManager {
         None
     }
 
-    /// 处理 message_delta 事件
-    pub fn handle_message_delta(&mut self, data: serde_json::Value) -> Vec<SseEvent> {
-        if self.message_delta_sent {
-            tracing::debug!("跳过重复的 message_delta 事件");
-            return Vec::new();
-        }
-
-        let mut events = Vec::new();
-
-        // 先关闭所有未关闭的块
-        for (index, block) in self.active_blocks.iter_mut() {
-            if block.started && !block.stopped {
-                events.push(SseEvent::new(
-                    "content_block_stop",
-                    json!({
-                        "type": "content_block_stop",
-                        "index": index
-                    }),
-                ));
-                block.stopped = true;
-            }
-        }
-
-        self.message_delta_sent = true;
-        events.push(SseEvent::new("message_delta", data));
-        events
-    }
-
     /// 处理 message_stop 事件
     pub fn handle_message_stop(&mut self) -> Option<SseEvent> {
         if self.message_ended {
@@ -1004,7 +976,7 @@ mod tests {
         assert_eq!(events[0].event, "message_start");
         assert_eq!(events[1].event, "content_block_start");
     }
-    
+
     #[test]
     fn test_find_real_thinking_start_tag_basic() {
         // 基本情况：正常的开始标签
