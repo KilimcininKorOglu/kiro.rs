@@ -68,14 +68,6 @@ impl HeaderValue {
         }
     }
 
-    /// 尝试获取布尔值
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Bool(b) => Some(*b),
-            _ => None,
-        }
-    }
-
     /// 尝试获取整数值
     pub fn as_i64(&self) -> Option<i64> {
         match self {
