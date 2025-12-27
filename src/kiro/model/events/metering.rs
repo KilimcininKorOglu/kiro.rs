@@ -33,25 +33,6 @@ impl EventPayload for MeteringEvent {
 }
 
 impl MeteringEvent {
-    /// 获取计费单位
-    pub fn unit(&self) -> &str {
-        &self.unit
-    }
-
-    /// 获取计费单位复数形式
-    pub fn unit_plural(&self) -> &str {
-        &self.unit_plural
-    }
-
-    /// 获取使用量
-    pub fn usage(&self) -> f64 {
-        self.usage
-    }
-
-    /// 获取格式化的使用量字符串 (6位小数精度)
-    pub fn formatted_usage(&self) -> String {
-        self.format_usage_with_precision(6)
-    }
 
     /// 获取格式化的简短使用量字符串 (3位小数精度)
     pub fn formatted_usage_short(&self) -> String {
@@ -72,44 +53,5 @@ impl MeteringEvent {
 impl std::fmt::Display for MeteringEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.formatted_usage_short())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_deserialize() {
-        let json = r#"{
-            "unit": "credit",
-            "unitPlural": "credits",
-            "usage": 0.24743150922056384
-        }"#;
-        let event: MeteringEvent = serde_json::from_str(json).unwrap();
-        assert_eq!(event.unit(), "credit");
-        assert_eq!(event.unit_plural(), "credits");
-        assert!((event.usage() - 0.247).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_formatted_usage() {
-        let event = MeteringEvent {
-            unit: "credit".to_string(),
-            unit_plural: "credits".to_string(),
-            usage: 0.247,
-        };
-        assert!(event.formatted_usage().contains("credits"));
-    }
-
-    #[test]
-    fn test_singular_unit() {
-        let event = MeteringEvent {
-            unit: "credit".to_string(),
-            unit_plural: "credits".to_string(),
-            usage: 1.0,
-        };
-        assert!(event.formatted_usage().contains("credit"));
-        assert!(!event.formatted_usage().contains("credits"));
     }
 }
