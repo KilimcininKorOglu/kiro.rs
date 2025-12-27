@@ -19,6 +19,7 @@
 mod handlers;
 mod middleware;
 mod router;
+pub mod token;
 pub mod types;
 
 pub use middleware::AppState;
