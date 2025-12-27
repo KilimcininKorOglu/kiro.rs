@@ -347,18 +347,6 @@ impl SseStateManager {
         None
     }
 
-    /// 处理 message_stop 事件
-    pub fn handle_message_stop(&mut self) -> Option<SseEvent> {
-        if self.message_ended {
-            return None;
-        }
-        self.message_ended = true;
-        Some(SseEvent::new(
-            "message_stop",
-            json!({ "type": "message_stop" }),
-        ))
-    }
-
     /// 生成最终事件序列
     pub fn generate_final_events(&mut self, output_tokens: i32) -> Vec<SseEvent> {
         let mut events = Vec::new();
