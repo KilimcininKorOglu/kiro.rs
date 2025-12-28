@@ -29,6 +29,18 @@ pub struct Config {
 
     #[serde(default = "default_node_version")]
     pub node_version: String,
+
+    /// 外部 count_tokens API 地址（可选）
+    #[serde(default)]
+    pub count_tokens_api_url: Option<String>,
+
+    /// count_tokens API 密钥（可选）
+    #[serde(default)]
+    pub count_tokens_api_key: Option<String>,
+
+    /// count_tokens API 认证类型（可选，"x-api-key" 或 "bearer"，默认 "x-api-key"）
+    #[serde(default = "default_count_tokens_auth_type")]
+    pub count_tokens_auth_type: String,
 }
 
 fn default_host() -> String {
@@ -56,6 +68,10 @@ fn default_node_version() -> String {
     "22.21.1".to_string()
 }
 
+fn default_count_tokens_auth_type() -> String {
+    "x-api-key".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -67,6 +83,9 @@ impl Default for Config {
             api_key: None,
             system_version: default_system_version(),
             node_version: default_node_version(),
+            count_tokens_api_url: None,
+            count_tokens_api_key: None,
+            count_tokens_auth_type: default_count_tokens_auth_type(),
         }
     }
 }
