@@ -108,8 +108,7 @@ pub struct Message {
 /// 系统消息
 #[derive(Debug, Deserialize)]
 pub struct SystemMessage {
-    #[serde(rename = "type")]
-    pub text: String,
+    pub text: String
 }
 
 /// 工具定义
