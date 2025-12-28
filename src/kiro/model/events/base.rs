@@ -70,7 +70,7 @@ pub enum Event {
     /// 计费
     Metering(()),
     /// 上下文使用率
-    ContextUsage(()),
+    ContextUsage(super::ContextUsageEvent),
     /// 未知事件 (保留原始帧数据)
     Unknown {},
     /// 服务端错误
@@ -120,7 +120,8 @@ impl Event {
                 Ok(Self::Metering(()))
             }
             EventType::ContextUsage => {
-                Ok(Self::ContextUsage(()))
+                let payload = super::ContextUsageEvent::from_frame(&frame)?;
+                Ok(Self::ContextUsage(payload))
             }
             EventType::Unknown => Ok(Self::Unknown {}),
         }
