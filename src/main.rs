@@ -48,13 +48,6 @@ async fn main() {
     let token_manager = TokenManager::new(config.clone(), credentials.clone());
     let kiro_provider = KiroProvider::new(token_manager);
 
-    // 初始化 count_tokens 配置
-    anthropic::token::init_config(anthropic::token::CountTokensConfig {
-        api_url: config.count_tokens_api_url.clone(),
-        api_key: config.count_tokens_api_key.clone(),
-        auth_type: config.count_tokens_auth_type.clone(),
-    });
-
     // 构建路由（从凭据获取 profile_arn）
     let app = anthropic::create_router_with_provider(&api_key, Some(kiro_provider), credentials.profile_arn.clone());
 
@@ -65,7 +58,6 @@ async fn main() {
     tracing::info!("可用 API:");
     tracing::info!("  GET  /v1/models");
     tracing::info!("  POST /v1/messages");
-    tracing::info!("  POST /v1/messages/count_tokens");
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

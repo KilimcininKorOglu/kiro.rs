@@ -17,7 +17,6 @@
 |------|------|-------------|
 | `/v1/models` | GET | 获取可用模型列表    |
 | `/v1/messages` | POST | 创建消息（对话）    |
-| `/v1/messages/count_tokens` | POST | 估算 Token 数量 |
 
 ## 快速开始
 
@@ -40,10 +39,7 @@ cargo build --release
    "kiroVersion": "0.8.0",
    "machineId": "如果你需要自定义机器码请将64位机器码填到这里",  // 不是标准格式会自动忽略, 自动生成
    "systemVersion": "darwin#24.6.0",
-   "nodeVersion": "22.21.1",
-   "countTokensApiUrl": "https://api.example.com/v1/messages/count_tokens",  // 可选，外部 count_tokens API 地址
-   "countTokensApiKey": "sk-your-count-tokens-api-key",  // 可选，外部 API 密钥
-   "countTokensAuthType": "x-api-key"  // 可选，认证类型：x-api-key 或 bearer
+   "nodeVersion": "22.21.1"
 }
 ```
 
@@ -103,9 +99,6 @@ curl http://127.0.0.1:8990/v1/messages \
 | `machineId` | string | - | 自定义机器码（64位十六进制）不定义则自动生成 |
 | `systemVersion` | string | 随机 | 系统版本标识                  |
 | `nodeVersion` | string | `22.21.1` | Node.js 版本标识            |
-| `countTokensApiUrl` | string | - | 外部 count_tokens API 地址（可选） |
-| `countTokensApiKey` | string | - | 外部 count_tokens API 密钥（可选） |
-| `countTokensAuthType` | string | `x-api-key` | 外部 API 认证类型：`x-api-key` 或 `bearer` |
 
 ### credentials.json
 

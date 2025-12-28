@@ -23,9 +23,7 @@ use crate::kiro::parser::decoder::EventStreamDecoder;
 use super::converter::{convert_request, ConversionError};
 use super::middleware::AppState;
 use super::stream::{SseEvent, StreamContext};
-use super::types::{
-    CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse,
-};
+use super::types::{ErrorResponse, MessagesRequest, Model, ModelsResponse};
 
 /// GET /v1/models
 ///
@@ -470,19 +468,3 @@ async fn handle_non_stream_request(
 
 
 
-/// POST /v1/messages/count_tokens
-///
-/// 计算消息的 token 数量
-pub async fn count_tokens(JsonExtractor(payload): JsonExtractor<CountTokensRequest>) -> impl IntoResponse {
-    tracing::info!(
-        model = %payload.model,
-        message_count = %payload.messages.len(),
-        "Received POST /v1/messages/count_tokens request"
-    );
-
-    let total_tokens = token::count_all_tokens(payload.model, payload.system, payload.messages, payload.tools) as i32;
-
-    Json(CountTokensResponse {
-        input_tokens: total_tokens.max(1) as i32,
-    })
-}

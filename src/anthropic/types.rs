@@ -150,22 +150,3 @@ pub struct ImageSource {
     pub media_type: String,
     pub data: String,
 }
-
-// === Count Tokens 端点类型 ===
-
-/// Token 计数请求
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CountTokensRequest {
-    pub model: String,
-    pub messages: Vec<Message>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<Vec<SystemMessage>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<Tool>>,
-}
-
-/// Token 计数响应
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CountTokensResponse {
-    pub input_tokens: i32,
-}
