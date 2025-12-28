@@ -9,7 +9,7 @@ use axum::{
 use crate::kiro::provider::KiroProvider;
 
 use super::{
-    handlers::{get_models, post_messages},
+    handlers::{count_tokens, get_models, post_messages},
     middleware::{auth_middleware, cors_layer, AppState},
 };
 
@@ -18,6 +18,7 @@ use super::{
 /// # 端点
 /// - `GET /v1/models` - 获取可用模型列表
 /// - `POST /v1/messages` - 创建消息（对话）
+/// - `POST /v1/messages/count_tokens` - 计算 token 数量
 ///
 /// # 认证
 /// 所有 `/v1` 路径需要 API Key 认证，支持：
@@ -46,6 +47,7 @@ pub fn create_router_with_provider(
     let v1_routes = Router::new()
         .route("/models", get(get_models))
         .route("/messages", post(post_messages))
+        .route("/messages/count_tokens", post(count_tokens))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
