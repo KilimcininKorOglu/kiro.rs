@@ -100,14 +100,14 @@ pub fn count_tokens(text: &str) -> u64 {
 /// 估算请求的输入 tokens
 ///
 /// 优先调用远程 API，失败时回退到本地计算
-pub(crate) fn count_all_tokens(system: Option<Vec<SystemMessage>>, messages: Vec<Message>, tools: Option<Vec<Tool>>) -> u64 {
+pub(crate) fn count_all_tokens(model: String, system: Option<Vec<SystemMessage>>, messages: Vec<Message>, tools: Option<Vec<Tool>>) -> u64 {
     // 检查是否配置了远程 API
     if let Some(config) = get_config() {
         if let Some(api_url) = &config.api_url {
             // 尝试调用远程 API
             let result = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(
-                    call_remote_count_tokens(api_url, config, &system, &messages, &tools)
+                    call_remote_count_tokens(api_url, config, model, &system, &messages, &tools)
                 )
             });
 
@@ -131,6 +131,7 @@ pub(crate) fn count_all_tokens(system: Option<Vec<SystemMessage>>, messages: Vec
 async fn call_remote_count_tokens(
     api_url: &str,
     config: &CountTokensConfig,
+    model: String,
     system: &Option<Vec<SystemMessage>>,
     messages: &Vec<Message>,
     tools: &Option<Vec<Tool>>,
@@ -139,7 +140,7 @@ async fn call_remote_count_tokens(
 
     // 构建请求体
     let request = CountTokensRequest {
-        model: "claude-sonnet-4-5-20250929".to_string(), // 模型名称用于 token 计算
+        model: model, // 模型名称用于 token 计算
         messages: messages.clone(),
         system: system.clone(),
         tools: tools.clone(),

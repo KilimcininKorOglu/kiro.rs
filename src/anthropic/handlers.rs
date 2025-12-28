@@ -143,7 +143,7 @@ pub async fn post_messages(
     tracing::debug!("Kiro request body: {}", request_body);
 
     // 估算输入 tokens
-    let input_tokens = token::count_all_tokens(payload.system, payload.messages, payload.tools) as i32;
+    let input_tokens = token::count_all_tokens(payload.model.clone(), payload.system, payload.messages, payload.tools) as i32;
 
     // 检查是否启用了thinking
     let thinking_enabled = payload.thinking
@@ -440,7 +440,7 @@ pub async fn count_tokens(JsonExtractor(payload): JsonExtractor<CountTokensReque
         "Received POST /v1/messages/count_tokens request"
     );
 
-    let total_tokens = token::count_all_tokens(payload.system, payload.messages, payload.tools) as i32;
+    let total_tokens = token::count_all_tokens(payload.model, payload.system, payload.messages, payload.tools) as i32;
 
     Json(CountTokensResponse {
         input_tokens: total_tokens.max(1) as i32,
