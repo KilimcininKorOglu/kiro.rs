@@ -221,6 +221,13 @@ impl SseStateManager {
         }
     }
 
+    /// 判断指定块是否处于可接收 delta 的打开状态
+    fn is_block_open_of_type(&self, index: i32, expected_type: &str) -> bool {
+        self.active_blocks
+            .get(&index)
+            .is_some_and(|b| b.started && !b.stopped && b.block_type == expected_type)
+    }
+
     /// 获取下一个块索引
     pub fn next_block_index(&mut self) -> i32 {
         let index = self.next_block_index;
@@ -537,24 +544,9 @@ impl StreamContext {
             return self.process_content_with_thinking(content);
         }
 
-        // 发送文本增量（非 thinking 模式）
-        // 使用 text_block_index，在 generate_initial_events 中已设置为 0
-        let text_index = self.text_block_index.unwrap_or(0);
-        if let Some(event) = self.state_manager.handle_content_block_delta(
-            text_index,
-            json!({
-                "type": "content_block_delta",
-                "index": text_index,
-                "delta": {
-                    "type": "text_delta",
-                    "text": content
-                }
-            }),
-        ) {
-            return vec![event];
-        }
-
-        Vec::new()
+        // 非 thinking 模式同样复用统一的 text_delta 发送逻辑，
+        // 以便在 tool_use 自动关闭文本块后能够自愈重建新的文本块，避免“吞字”。
+        self.create_text_delta_events(content)
     }
 
     /// 处理包含thinking块的内容
@@ -667,12 +659,19 @@ impl StreamContext {
     /// 创建 text_delta 事件
     ///
     /// 如果文本块尚未创建，会先创建文本块。
-    /// 当 thinking 启用时，文本块索引为 1（thinking 块为 0）；
-    /// 否则文本块索引为 0。
+    /// 当发生 tool_use 时，状态机会自动关闭当前文本块；后续文本会自动创建新的文本块继续输出。
     ///
     /// 返回值包含可能的 content_block_start 事件和 content_block_delta 事件。
     fn create_text_delta_events(&mut self, text: &str) -> Vec<SseEvent> {
         let mut events = Vec::new();
+
+        // 如果当前 text_block_index 指向的块已经被关闭（例如 tool_use 开始时自动 stop），
+        // 则丢弃该索引并创建新的文本块继续输出，避免 delta 被状态机拒绝导致“吞字”。
+        if let Some(idx) = self.text_block_index {
+            if !self.state_manager.is_block_open_of_type(idx, "text") {
+                self.text_block_index = None;
+            }
+        }
 
         // 获取或创建文本块索引
         let text_index = if let Some(idx) = self.text_block_index {
@@ -897,6 +896,57 @@ mod tests {
         // 重复 stop 应该被跳过
         let event = manager.handle_content_block_stop(0);
         assert!(event.is_none());
+    }
+
+    #[test]
+    fn test_text_delta_after_tool_use_restarts_text_block() {
+        let mut ctx = StreamContext::new_with_thinking("test-model", 1, false);
+
+        let initial_events = ctx.generate_initial_events();
+        assert!(initial_events
+            .iter()
+            .any(|e| e.event == "content_block_start" && e.data["content_block"]["type"] == "text"));
+
+        let initial_text_index = ctx.text_block_index.expect("initial text block index should exist");
+
+        // tool_use 开始会自动关闭现有 text block
+        let tool_events = ctx.process_tool_use(&crate::kiro::model::events::ToolUseEvent {
+            name: "test_tool".to_string(),
+            tool_use_id: "tool_1".to_string(),
+            input: "{}".to_string(),
+            stop: false,
+        });
+        assert!(
+            tool_events.iter().any(|e| {
+                e.event == "content_block_stop"
+                    && e.data["index"].as_i64() == Some(initial_text_index as i64)
+            }),
+            "tool_use should stop the previous text block"
+        );
+
+        // 之后再来文本增量，应自动创建新的 text block 而不是往已 stop 的块里写 delta
+        let text_events = ctx.process_assistant_response("hello");
+        let new_text_start_index = text_events.iter().find_map(|e| {
+            if e.event == "content_block_start" && e.data["content_block"]["type"] == "text" {
+                e.data["index"].as_i64()
+            } else {
+                None
+            }
+        });
+        assert!(new_text_start_index.is_some(), "should start a new text block");
+        assert_ne!(
+            new_text_start_index.unwrap(),
+            initial_text_index as i64,
+            "new text block index should differ from the stopped one"
+        );
+        assert!(
+            text_events.iter().any(|e| {
+                e.event == "content_block_delta"
+                    && e.data["delta"]["type"] == "text_delta"
+                    && e.data["delta"]["text"] == "hello"
+            }),
+            "should emit text_delta after restarting text block"
+        );
     }
 
     #[test]
