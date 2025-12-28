@@ -459,7 +459,7 @@ async fn handle_non_stream_request(
         "stop_sequence": null,
         "usage": {
             "input_tokens": final_input_tokens,
-            "output_tokens": output_tokens
+            "output_tokens": 1
         }
     });
 
