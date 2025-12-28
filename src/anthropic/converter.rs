@@ -77,7 +77,7 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
 
     // 5. 处理最后一条消息作为 current_message
     let last_message = req.messages.last().unwrap();
-    let (text_content, images, tool_results) = process_message_content(&last_message.content, &model_id)?;
+    let (text_content, images, tool_results) = process_message_content(&last_message.content)?;
 
     // 6. 转换工具定义
     let tools = convert_tools(&req.tools);
@@ -141,8 +141,7 @@ fn determine_chat_trigger_type(req: &MessagesRequest) -> String {
 
 /// 处理消息内容，提取文本、图片和工具结果
 fn process_message_content(
-    content: &serde_json::Value,
-    model_id: &str,
+    content: &serde_json::Value
 ) -> Result<(String, Vec<KiroImage>, Vec<ToolResult>), ConversionError> {
     let mut text_parts = Vec::new();
     let mut images = Vec::new();
@@ -193,9 +192,6 @@ fn process_message_content(
         }
         _ => {}
     }
-
-    // 对于历史消息，可能不需要 model_id 参数，这里忽略它
-    let _ = model_id;
 
     Ok((text_parts.join("\n"), images, tool_results))
 }
@@ -387,7 +383,7 @@ fn merge_user_messages(
     let mut all_tool_results = Vec::new();
 
     for msg in messages {
-        let (text, images, tool_results) = process_message_content(&msg.content, model_id)?;
+        let (text, images, tool_results) = process_message_content(&msg.content)?;
         if !text.is_empty() {
             content_parts.push(text);
         }
