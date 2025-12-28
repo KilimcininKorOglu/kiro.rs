@@ -65,7 +65,7 @@ pub fn count_tokens(text: &str) -> u64 {
         tokens * 1.0
     } as u64;
 
-    println!("tokens: {}, acc_tokens: {}", tokens, acc_token);
+    // println!("tokens: {}, acc_tokens: {}", tokens, acc_token);
     acc_token
 }
 
