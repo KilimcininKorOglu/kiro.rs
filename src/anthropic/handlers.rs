@@ -21,7 +21,6 @@ use crate::kiro::parser::decoder::EventStreamDecoder;
 use super::converter::{convert_request, ConversionError};
 use super::middleware::AppState;
 use super::stream::{SseEvent, StreamContext};
-use super::token::count_tokens as estimate_input_tokens;
 use super::types::{
     CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse,
 };
