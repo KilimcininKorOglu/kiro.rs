@@ -48,7 +48,7 @@ pub fn count_tokens(text: &str) -> u64 {
 
     let char_units: f64 = text
         .chars()
-        .map(|c| if is_non_western_char(c) { 4.5 } else { 1.0 })
+        .map(|c| if is_non_western_char(c) { 4.0 } else { 1.0 })
         .sum();
 
     let tokens = char_units / 4.0;
