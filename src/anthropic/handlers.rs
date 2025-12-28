@@ -12,6 +12,8 @@ use axum::{
 use bytes::Bytes;
 use futures::{stream, Stream, StreamExt};
 use serde_json::json;
+use std::time::Duration;
+use tokio::time::interval;
 use uuid::Uuid;
 use crate::anthropic::token;
 use crate::kiro::model::events::Event;
@@ -206,6 +208,14 @@ async fn handle_stream_request(
         .unwrap()
 }
 
+/// Ping 事件间隔（25秒）
+const PING_INTERVAL_SECS: u64 = 25;
+
+/// 创建 ping 事件的 SSE 字符串
+fn create_ping_sse() -> Bytes {
+    Bytes::from("event: ping\ndata: {\"type\": \"ping\"}\n\n")
+}
+
 /// 创建 SSE 事件流
 fn create_sse_stream(
     response: reqwest::Response,
@@ -219,63 +229,74 @@ fn create_sse_stream(
             .map(|e| Ok(Bytes::from(e.to_sse_string()))),
     );
 
-    // 然后处理 Kiro 响应流
+    // 然后处理 Kiro 响应流，同时每25秒发送 ping 保活
     let body_stream = response.bytes_stream();
 
     let processing_stream = stream::unfold(
-        (body_stream, ctx, EventStreamDecoder::new(), false),
-        |(mut body_stream, mut ctx, mut decoder, finished)| async move {
+        (body_stream, ctx, EventStreamDecoder::new(), false, interval(Duration::from_secs(PING_INTERVAL_SECS))),
+        |(mut body_stream, mut ctx, mut decoder, finished, mut ping_interval)| async move {
             if finished {
                 return None;
             }
 
-            // 尝试获取下一个 chunk
-            match body_stream.next().await {
-                Some(Ok(chunk)) => {
-                    // 解码事件
-                    decoder.feed(&chunk);
+            // 使用 select! 同时等待数据和 ping 定时器
+            tokio::select! {
+                // 处理数据流
+                chunk_result = body_stream.next() => {
+                    match chunk_result {
+                        Some(Ok(chunk)) => {
+                            // 解码事件
+                            decoder.feed(&chunk);
 
-                    let mut events = Vec::new();
-                    for result in decoder.decode_iter() {
-                        match result {
-                            Ok(frame) => {
-                                if let Ok(event) = Event::from_frame(frame) {
-                                    let sse_events = ctx.process_kiro_event(&event);
-                                    events.extend(sse_events);
+                            let mut events = Vec::new();
+                            for result in decoder.decode_iter() {
+                                match result {
+                                    Ok(frame) => {
+                                        if let Ok(event) = Event::from_frame(frame) {
+                                            let sse_events = ctx.process_kiro_event(&event);
+                                            events.extend(sse_events);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("解码事件失败: {}", e);
+                                    }
                                 }
                             }
-                            Err(e) => {
-                                tracing::warn!("解码事件失败: {}", e);
-                            }
+
+                            // 转换为 SSE 字节流
+                            let bytes: Vec<Result<Bytes, Infallible>> = events
+                                .into_iter()
+                                .map(|e| Ok(Bytes::from(e.to_sse_string())))
+                                .collect();
+
+                            Some((stream::iter(bytes), (body_stream, ctx, decoder, false, ping_interval)))
+                        }
+                        Some(Err(e)) => {
+                            tracing::error!("读取响应流失败: {}", e);
+                            // 发送最终事件并结束
+                            let final_events = ctx.generate_final_events();
+                            let bytes: Vec<Result<Bytes, Infallible>> = final_events
+                                .into_iter()
+                                .map(|e| Ok(Bytes::from(e.to_sse_string())))
+                                .collect();
+                            Some((stream::iter(bytes), (body_stream, ctx, decoder, true, ping_interval)))
+                        }
+                        None => {
+                            // 流结束，发送最终事件
+                            let final_events = ctx.generate_final_events();
+                            let bytes: Vec<Result<Bytes, Infallible>> = final_events
+                                .into_iter()
+                                .map(|e| Ok(Bytes::from(e.to_sse_string())))
+                                .collect();
+                            Some((stream::iter(bytes), (body_stream, ctx, decoder, true, ping_interval)))
                         }
                     }
-
-                    // 转换为 SSE 字节流
-                    let bytes: Vec<Result<Bytes, Infallible>> = events
-                        .into_iter()
-                        .map(|e| Ok(Bytes::from(e.to_sse_string())))
-                        .collect();
-
-                    Some((stream::iter(bytes), (body_stream, ctx, decoder, false)))
                 }
-                Some(Err(e)) => {
-                    tracing::error!("读取响应流失败: {}", e);
-                    // 发送最终事件并结束
-                    let final_events = ctx.generate_final_events();
-                    let bytes: Vec<Result<Bytes, Infallible>> = final_events
-                        .into_iter()
-                        .map(|e| Ok(Bytes::from(e.to_sse_string())))
-                        .collect();
-                    Some((stream::iter(bytes), (body_stream, ctx, decoder, true)))
-                }
-                None => {
-                    // 流结束，发送最终事件
-                    let final_events = ctx.generate_final_events();
-                    let bytes: Vec<Result<Bytes, Infallible>> = final_events
-                        .into_iter()
-                        .map(|e| Ok(Bytes::from(e.to_sse_string())))
-                        .collect();
-                    Some((stream::iter(bytes), (body_stream, ctx, decoder, true)))
+                // 发送 ping 保活
+                _ = ping_interval.tick() => {
+                    tracing::trace!("发送 ping 保活事件");
+                    let bytes: Vec<Result<Bytes, Infallible>> = vec![Ok(create_ping_sse())];
+                    Some((stream::iter(bytes), (body_stream, ctx, decoder, false, ping_interval)))
                 }
             }
         },
