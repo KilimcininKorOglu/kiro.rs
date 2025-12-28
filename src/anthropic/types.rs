@@ -98,7 +98,7 @@ pub struct MessagesRequest {
 }
 
 /// 消息
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Message {
     pub role: String,
     /// 可以是 string 或 ContentBlock 数组
@@ -106,13 +106,13 @@ pub struct Message {
 }
 
 /// 系统消息
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SystemMessage {
-    pub text: String
+    pub text: String,
 }
 
 /// 工具定义
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tool {
     pub name: String,
     pub description: String,
@@ -154,16 +154,18 @@ pub struct ImageSource {
 // === Count Tokens 端点类型 ===
 
 /// Token 计数请求
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CountTokensRequest {
     pub model: String,
     pub messages: Vec<Message>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Vec<SystemMessage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<Tool>>,
 }
 
 /// Token 计数响应
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CountTokensResponse {
     pub input_tokens: i32,
 }
