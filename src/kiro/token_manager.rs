@@ -108,6 +108,8 @@ async fn refresh_token(
 ) -> anyhow::Result<KiroCredentials> {
     validate_refresh_token(credentials)?;
 
+    tracing::info!("正在刷新 Token...");
+
     let refresh_token = credentials.refresh_token.as_ref().unwrap();
     let region = &config.region;
 
