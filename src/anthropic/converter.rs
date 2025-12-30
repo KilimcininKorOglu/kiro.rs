@@ -416,20 +416,26 @@ fn merge_user_messages(
 fn convert_assistant_message(
     msg: &super::types::Message,
 ) -> Result<HistoryAssistantMessage, ConversionError> {
-    let mut content = String::new();
+    let mut thinking_content = String::new();
+    let mut text_content = String::new();
     let mut tool_uses = Vec::new();
 
     match &msg.content {
         serde_json::Value::String(s) => {
-            content = s.clone();
+            text_content = s.clone();
         }
         serde_json::Value::Array(arr) => {
             for item in arr {
                 if let Ok(block) = serde_json::from_value::<ContentBlock>(item.clone()) {
                     match block.block_type.as_str() {
+                        "thinking" => {
+                            if let Some(thinking) = block.thinking {
+                                thinking_content.push_str(&thinking);
+                            }
+                        }
                         "text" => {
                             if let Some(text) = block.text {
-                                content.push_str(&text);
+                                text_content.push_str(&text);
                             }
                         }
                         "tool_use" => {
@@ -453,7 +459,19 @@ fn convert_assistant_message(
         _ => {}
     }
 
-    let mut assistant = AssistantMessage::new(content);
+    // 组合 thinking 和 text 内容
+    // 格式: <thinking>思考内容</thinking>\n\ntext内容
+    let final_content = if !thinking_content.is_empty() {
+        if !text_content.is_empty() {
+            format!("<thinking>{}</thinking>\n\n{}", thinking_content, text_content)
+        } else {
+            format!("<thinking>{}</thinking>", thinking_content)
+        }
+    } else {
+        text_content
+    };
+
+    let mut assistant = AssistantMessage::new(final_content);
     if !tool_uses.is_empty() {
         assistant = assistant.with_tool_uses(tool_uses);
     }
