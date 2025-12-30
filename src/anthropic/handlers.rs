@@ -15,7 +15,7 @@ use serde_json::json;
 use std::time::Duration;
 use tokio::time::interval;
 use uuid::Uuid;
-use crate::anthropic::token;
+use crate::token;
 use crate::kiro::model::events::Event;
 use crate::kiro::model::requests::kiro::KiroRequest;
 use crate::kiro::parser::decoder::EventStreamDecoder;
@@ -461,7 +461,7 @@ async fn handle_non_stream_request(
         "stop_sequence": null,
         "usage": {
             "input_tokens": final_input_tokens,
-            "output_tokens": 1
+            "output_tokens": output_tokens
         }
     });
 
