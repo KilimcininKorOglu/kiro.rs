@@ -92,12 +92,8 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
     }
 
     // 8. 构建当前消息
-    // 如果有工具结果，content 设置为空字符串
-    let content = if !tool_results.is_empty() {
-        String::new()
-    } else {
-        text_content
-    };
+    // 保留文本内容，即使有工具结果也不丢弃用户文本
+    let content = text_content;
 
     let mut user_input = UserInputMessage::new(content, &model_id)
         .with_context(context)
@@ -392,10 +388,8 @@ fn merge_user_messages(
     }
 
     let content = content_parts.join("\n");
-    let mut user_msg = UserMessage::new(
-        if !all_tool_results.is_empty() { "" } else { &content },
-        model_id,
-    );
+    // 保留文本内容，即使有工具结果也不丢弃用户文本
+    let mut user_msg = UserMessage::new(&content, model_id);
 
     if !all_images.is_empty() {
         user_msg = user_msg.with_images(all_images);
