@@ -26,13 +26,25 @@ pub struct KiroCredentials {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
 
-    /// 认证方式
+    /// 认证方式 (social / idc / builder-id)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
 
     /// 凭证提供者标识
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+
+    /// OIDC Client ID (IdC 认证需要)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+
+    /// OIDC Client Secret (IdC 认证需要)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_secret: Option<String>,
+
+    /// IdC Start URL (IdC 认证需要)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_url: Option<String>,
 }
 
 impl KiroCredentials {
@@ -107,6 +119,9 @@ mod tests {
             expires_at: None,
             auth_method: Some("social".to_string()),
             provider: None,
+            client_id: None,
+            client_secret: None,
+            start_url: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
