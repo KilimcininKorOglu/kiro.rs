@@ -305,11 +305,11 @@ fn build_history(
                 system_content
             };
 
-            // 系统消息作为 user + assistant("OK") 配对
+            // 系统消息作为 user + assistant 配对
             let user_msg = HistoryUserMessage::new(final_content, model_id);
             history.push(Message::User(user_msg));
 
-            let assistant_msg = HistoryAssistantMessage::new("OK");
+            let assistant_msg = HistoryAssistantMessage::new("I will follow these instructions.");
             history.push(Message::Assistant(assistant_msg));
         }
     } else if let Some(ref prefix) = thinking_prefix {
@@ -317,7 +317,7 @@ fn build_history(
         let user_msg = HistoryUserMessage::new(prefix.clone(), model_id);
         history.push(Message::User(user_msg));
 
-        let assistant_msg = HistoryAssistantMessage::new("OK");
+        let assistant_msg = HistoryAssistantMessage::new("I will follow these instructions.");
         history.push(Message::Assistant(assistant_msg));
     }
 
