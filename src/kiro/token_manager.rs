@@ -113,7 +113,7 @@ async fn refresh_token(
     // 根据 auth_method 选择刷新方式
     let auth_method = credentials.auth_method.as_deref().unwrap_or("social");
 
-    match auth_method {
+    match auth_method.to_lowercase().as_str() {
         "idc" | "builder-id" => refresh_idc_token(credentials, config).await,
         _ => refresh_social_token(credentials, config).await,
     }
