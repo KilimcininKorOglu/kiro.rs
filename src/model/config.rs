@@ -41,6 +41,19 @@ pub struct Config {
     /// count_tokens API 认证类型（可选，"x-api-key" 或 "bearer"，默认 "x-api-key"）
     #[serde(default = "default_count_tokens_auth_type")]
     pub count_tokens_auth_type: String,
+
+    /// HTTP 代理地址（可选）
+    /// 支持格式: http://host:port, https://host:port, socks5://host:port
+    #[serde(default)]
+    pub proxy_url: Option<String>,
+
+    /// 代理认证用户名（可选）
+    #[serde(default)]
+    pub proxy_username: Option<String>,
+
+    /// 代理认证密码（可选）
+    #[serde(default)]
+    pub proxy_password: Option<String>,
 }
 
 fn default_host() -> String {
@@ -86,6 +99,9 @@ impl Default for Config {
             count_tokens_api_url: None,
             count_tokens_api_key: None,
             count_tokens_auth_type: default_count_tokens_auth_type(),
+            proxy_url: None,
+            proxy_username: None,
+            proxy_password: None,
         }
     }
 }

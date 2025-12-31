@@ -5,6 +5,7 @@
 use anyhow::bail;
 use chrono::{DateTime, Duration, Utc};
 
+use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::model::token_refresh::{
@@ -18,14 +19,16 @@ use crate::model::config::Config;
 pub struct TokenManager {
     config: Config,
     credentials: KiroCredentials,
+    proxy: Option<ProxyConfig>,
 }
 
 impl TokenManager {
     /// 创建新的 TokenManager 实例
-    pub fn new(config: Config, credentials: KiroCredentials) -> Self {
+    pub fn new(config: Config, credentials: KiroCredentials, proxy: Option<ProxyConfig>) -> Self {
         Self {
             config,
             credentials,
+            proxy,
         }
     }
 
@@ -44,7 +47,7 @@ impl TokenManager {
     /// 如果 Token 过期或即将过期，会自动刷新
     pub async fn ensure_valid_token(&mut self) -> anyhow::Result<String> {
         if is_token_expired(&self.credentials) || is_token_expiring_soon(&self.credentials) {
-            self.credentials = refresh_token(&self.credentials, &self.config).await?;
+            self.credentials = refresh_token(&self.credentials, &self.config, self.proxy.as_ref()).await?;
 
             // 刷新后再次检查 token 时间有效性
             if is_token_expired(&self.credentials) {
@@ -107,6 +110,7 @@ fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
 async fn refresh_token(
     credentials: &KiroCredentials,
     config: &Config,
+    proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<KiroCredentials> {
     validate_refresh_token(credentials)?;
 
@@ -114,8 +118,8 @@ async fn refresh_token(
     let auth_method = credentials.auth_method.as_deref().unwrap_or("social");
 
     match auth_method.to_lowercase().as_str() {
-        "idc" | "builder-id" => refresh_idc_token(credentials, config).await,
-        _ => refresh_social_token(credentials, config).await,
+        "idc" | "builder-id" => refresh_idc_token(credentials, config, proxy).await,
+        _ => refresh_social_token(credentials, config, proxy).await,
     }
 }
 
@@ -123,6 +127,7 @@ async fn refresh_token(
 async fn refresh_social_token(
     credentials: &KiroCredentials,
     config: &Config,
+    proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<KiroCredentials> {
     tracing::info!("正在刷新 Social Token...");
 
@@ -135,7 +140,7 @@ async fn refresh_social_token(
         .ok_or_else(|| anyhow::anyhow!("无法生成 machineId"))?;
     let kiro_version = &config.kiro_version;
 
-    let client = reqwest::Client::new();
+    let client = build_client(proxy, 60)?;
     let body = RefreshRequest {
         refresh_token: refresh_token.to_string(),
     };
@@ -197,6 +202,7 @@ const IDC_AMZ_USER_AGENT: &str =
 async fn refresh_idc_token(
     credentials: &KiroCredentials,
     config: &Config,
+    proxy: Option<&ProxyConfig>,
 ) -> anyhow::Result<KiroCredentials> {
     tracing::info!("正在刷新 IdC Token...");
 
@@ -213,7 +219,7 @@ async fn refresh_idc_token(
     let region = &config.region;
     let refresh_url = format!("https://oidc.{}.amazonaws.com/token", region);
 
-    let client = reqwest::Client::new();
+    let client = build_client(proxy, 60)?;
     let body = IdcRefreshRequest {
         client_id: client_id.to_string(),
         client_secret: client_secret.to_string(),
@@ -274,7 +280,7 @@ mod tests {
     fn test_token_manager_new() {
         let config = Config::default();
         let credentials = KiroCredentials::default();
-        let tm = TokenManager::new(config, credentials);
+        let tm = TokenManager::new(config, credentials, None);
         assert!(tm.credentials().access_token.is_none());
     }
 

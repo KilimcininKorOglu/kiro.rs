@@ -7,6 +7,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONNECTION, CONTENT
 use reqwest::Client;
 use uuid::Uuid;
 
+use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
 use crate::kiro::token_manager::TokenManager;
 
@@ -21,12 +22,17 @@ pub struct KiroProvider {
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
     pub fn new(token_manager: TokenManager) -> Self {
+        Self::with_proxy(token_manager, None)
+    }
+
+    /// 创建带代理配置的 KiroProvider 实例
+    pub fn with_proxy(token_manager: TokenManager, proxy: Option<ProxyConfig>) -> Self {
+        let client = build_client(proxy.as_ref(), 720) // 12 分钟超时
+            .expect("创建 HTTP 客户端失败");
+
         Self {
             token_manager,
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(720)) // 12 分钟超时
-                .build()
-                .expect("Failed to create HTTP client"),
+            client,
         }
     }
 
@@ -168,7 +174,7 @@ mod tests {
     fn test_base_url() {
         let config = Config::default();
         let credentials = KiroCredentials::default();
-        let tm = TokenManager::new(config, credentials);
+        let tm = TokenManager::new(config, credentials, None);
         let provider = KiroProvider::new(tm);
         assert!(provider.base_url().contains("amazonaws.com"));
         assert!(provider.base_url().contains("generateAssistantResponse"));
@@ -179,7 +185,7 @@ mod tests {
         let mut config = Config::default();
         config.region = "us-east-1".to_string();
         let credentials = KiroCredentials::default();
-        let tm = TokenManager::new(config, credentials);
+        let tm = TokenManager::new(config, credentials, None);
         let provider = KiroProvider::new(tm);
         assert_eq!(provider.base_domain(), "q.us-east-1.amazonaws.com");
     }
@@ -194,7 +200,7 @@ mod tests {
         credentials.profile_arn = Some("arn:aws:sso::123456789:profile/test".to_string());
         credentials.refresh_token = Some("a".repeat(150));
 
-        let tm = TokenManager::new(config, credentials);
+        let tm = TokenManager::new(config, credentials, None);
         let provider = KiroProvider::new(tm);
         let headers = provider.build_headers("test_token").unwrap();
 

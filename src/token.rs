@@ -9,6 +9,7 @@
 
 use std::sync::OnceLock;
 use crate::anthropic::types::{CountTokensRequest, CountTokensResponse, Message, SystemMessage, Tool};
+use crate::http_client::{build_client, ProxyConfig};
 
 /// Count Tokens API 配置
 #[derive(Clone, Default)]
@@ -19,6 +20,8 @@ pub struct CountTokensConfig {
     pub api_key: Option<String>,
     /// count_tokens API 认证类型（"x-api-key" 或 "bearer"）
     pub auth_type: String,
+    /// 代理配置
+    pub proxy: Option<ProxyConfig>,
 }
 
 /// 全局配置存储
@@ -136,7 +139,7 @@ async fn call_remote_count_tokens(
     messages: &Vec<Message>,
     tools: &Option<Vec<Tool>>,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
+    let client = build_client(config.proxy.as_ref(), 300)?;
 
     // 构建请求体
     let request = CountTokensRequest {
@@ -162,7 +165,6 @@ async fn call_remote_count_tokens(
     let response = req_builder
         .header("Content-Type", "application/json")
         .json(&request)
-        .timeout(std::time::Duration::from_secs(5))
         .send()
         .await?;
 
