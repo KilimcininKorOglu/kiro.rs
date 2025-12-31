@@ -31,7 +31,7 @@
 //! ```
 
 use super::error::{ParseError, ParseResult};
-use super::frame::{Frame, FrameParser};
+use super::frame::{parse_frame, Frame, PRELUDE_SIZE};
 use bytes::{Buf, BytesMut};
 
 /// 默认最大缓冲区大小 (16 MB)
@@ -188,7 +188,7 @@ impl EventStreamDecoder {
         // 转移到 Parsing 状态
         self.state = DecoderState::Parsing;
 
-        match FrameParser::parse(&self.buffer) {
+        match parse_frame(&self.buffer) {
             Ok(Some((frame, consumed))) => {
                 // 成功解析
                 self.buffer.advance(consumed);
@@ -220,8 +220,8 @@ impl EventStreamDecoder {
                     });
                 }
 
-                // 尝试容错恢复
-                self.try_recover();
+                // 根据错误类型采用不同的恢复策略
+                self.try_recover(&e);
                 self.state = DecoderState::Recovering;
                 Err(e)
             }
@@ -235,17 +235,71 @@ impl EventStreamDecoder {
 
     /// 尝试容错恢复
     ///
-    /// 策略：跳过一个字节，尝试找到下一个有效消息边界
-    fn try_recover(&mut self) {
-        if !self.buffer.is_empty() {
-            let skipped_byte = self.buffer[0];
-            self.buffer.advance(1);
-            self.bytes_skipped += 1;
-            tracing::warn!(
-                "容错恢复: 跳过字节 0x{:02x} (累计跳过 {} 字节)",
-                skipped_byte,
-                self.bytes_skipped
-            );
+    /// 根据错误类型采用不同的恢复策略（参考 kiro-kt 的设计）：
+    /// - Prelude 阶段错误（CRC 失败、长度异常）：跳过 1 字节，尝试找下一帧边界
+    /// - Data 阶段错误（Message CRC 失败、Header 解析失败）：跳过整个损坏帧
+    fn try_recover(&mut self, error: &ParseError) {
+        if self.buffer.is_empty() {
+            return;
+        }
+
+        match error {
+            // Prelude 阶段错误：可能是帧边界错位，逐字节扫描找下一个有效边界
+            ParseError::PreludeCrcMismatch { .. }
+            | ParseError::MessageTooSmall { .. }
+            | ParseError::MessageTooLarge { .. } => {
+                let skipped_byte = self.buffer[0];
+                self.buffer.advance(1);
+                self.bytes_skipped += 1;
+                tracing::warn!(
+                    "Prelude 错误恢复: 跳过字节 0x{:02x} (累计跳过 {} 字节)",
+                    skipped_byte,
+                    self.bytes_skipped
+                );
+            }
+
+            // Data 阶段错误：帧边界正确但数据损坏，跳过整个帧
+            ParseError::MessageCrcMismatch { .. } | ParseError::HeaderParseFailed(_) => {
+                // 尝试读取 total_length 来跳过整帧
+                if self.buffer.len() >= PRELUDE_SIZE {
+                    let total_length =
+                        u32::from_be_bytes([self.buffer[0], self.buffer[1], self.buffer[2], self.buffer[3]])
+                            as usize;
+
+                    // 确保 total_length 合理且缓冲区有足够数据
+                    if total_length >= 16 && total_length <= self.buffer.len() {
+                        tracing::warn!(
+                            "Data 错误恢复: 跳过损坏帧 ({} 字节)",
+                            total_length
+                        );
+                        self.buffer.advance(total_length);
+                        self.bytes_skipped += total_length;
+                        return;
+                    }
+                }
+
+                // 无法确定帧长度，回退到逐字节跳过
+                let skipped_byte = self.buffer[0];
+                self.buffer.advance(1);
+                self.bytes_skipped += 1;
+                tracing::warn!(
+                    "Data 错误恢复 (回退): 跳过字节 0x{:02x} (累计跳过 {} 字节)",
+                    skipped_byte,
+                    self.bytes_skipped
+                );
+            }
+
+            // 其他错误：逐字节跳过
+            _ => {
+                let skipped_byte = self.buffer[0];
+                self.buffer.advance(1);
+                self.bytes_skipped += 1;
+                tracing::warn!(
+                    "通用错误恢复: 跳过字节 0x{:02x} (累计跳过 {} 字节)",
+                    skipped_byte,
+                    self.bytes_skipped
+                );
+            }
         }
     }
 
