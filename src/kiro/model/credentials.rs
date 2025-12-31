@@ -30,10 +30,6 @@ pub struct KiroCredentials {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
 
-    /// 凭证提供者标识
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-
     /// OIDC Client ID (IdC 认证需要)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
@@ -41,10 +37,6 @@ pub struct KiroCredentials {
     /// OIDC Client Secret (IdC 认证需要)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
-
-    /// IdC Start URL (IdC 认证需要)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_url: Option<String>,
 }
 
 impl KiroCredentials {
@@ -86,8 +78,7 @@ mod tests {
             "refreshToken": "test_refresh",
             "profileArn": "arn:aws:test",
             "expiresAt": "2024-01-01T00:00:00Z",
-            "authMethod": "social",
-            "provider": "Google"
+            "authMethod": "social"
         }"#;
 
         let creds = KiroCredentials::from_json(json).unwrap();
@@ -96,7 +87,6 @@ mod tests {
         assert_eq!(creds.profile_arn, Some("arn:aws:test".to_string()));
         assert_eq!(creds.expires_at, Some("2024-01-01T00:00:00Z".to_string()));
         assert_eq!(creds.auth_method, Some("social".to_string()));
-        assert_eq!(creds.provider, Some("Google".to_string()));
     }
 
     #[test]
@@ -118,10 +108,8 @@ mod tests {
             profile_arn: None,
             expires_at: None,
             auth_method: Some("social".to_string()),
-            provider: None,
             client_id: None,
             client_secret: None,
-            start_url: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
