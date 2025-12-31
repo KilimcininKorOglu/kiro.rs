@@ -33,35 +33,64 @@ cargo build --release
 
 ```json
 {
+   "host": "127.0.0.1",   // 必配, 监听地址
+   "port": 8990,  // 必配, 监听端口
+   "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",  // 必配, 请求的鉴权 token
+   "region": "us-east-1",  // 必配, 区域, 一般保持默认即可
+   "kiroVersion": "0.8.0",  // 可选, 用于自定义请求特征, 不需要请删除: kiro ide 版本
+   "machineId": "如果你需要自定义机器码请将64位机器码填到这里", // 可选, 用于自定义请求特征, 不需要请删除: 机器码
+   "systemVersion": "darwin#24.6.0",  // 可选, 用于自定义请求特征, 不需要请删除: 系统版本
+   "nodeVersion": "22.21.1",  // 可选, 用于自定义请求特征, 不需要请删除: node 版本
+   "countTokensApiUrl": "https://api.example.com/v1/messages/count_tokens", // 可选, 用于自定义token统计API, 不需要请删除
+   "countTokensApiKey": "sk-your-count-tokens-api-key",  // 可选, 用于自定义token统计API, 不需要请删除
+   "countTokensAuthType": "x-api-key",  // 可选, 用于自定义token统计API, 不需要请删除
+   "proxyUrl": "http://127.0.0.1:7890", // 可选, HTTP/SOCK5代理, 不需要请删除
+   "proxyUsername": "user",  // 可选, HTTP/SOCK5代理用户名, 不需要请删除
+   "proxyPassword": "pass"  // 可选, HTTP/SOCK5代理密码, 不需要请删除
+}
+```
+最小启动配置为: 
+```json
+{
    "host": "127.0.0.1",
    "port": 8990,
    "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
-   "region": "us-east-1",
-   "kiroVersion": "0.8.0",
-   "machineId": "如果你需要自定义机器码请将64位机器码填到这里",  // 不是标准格式会自动忽略, 自动生成
-   "systemVersion": "darwin#24.6.0",
-   "nodeVersion": "22.21.1",
-   "countTokensApiUrl": "https://api.example.com/v1/messages/count_tokens",  // 可选，外部 count_tokens API 地址
-   "countTokensApiKey": "sk-your-count-tokens-api-key",  // 可选，外部 API 密钥
-   "countTokensAuthType": "x-api-key"  // 可选，认证类型：x-api-key 或 bearer
+   "region": "us-east-1"
 }
 ```
-
 ### 3. 凭证文件
 
 创建 `credentials.json` 凭证文件（从 Kiro IDE 获取）：
 
 ```json
 {
-  "accessToken": "your-access-token",
-  "refreshToken": "your-refresh-token",
-  "profileArn": "arn:aws:codewhisperer:us-east-1:{12位数字}:profile/{12位大写字母数字字符串}",  // 登录时返回
-  "expiresAt": "2024-01-01T00:00:00Z",
-  "authMethod": "social",
-  "provider": "Google"
+   "accessToken": "这里是请求token 一般有效期一小时",  // 可选, 不需要请删除, 可以自动刷新
+   "refreshToken": "这里是刷新token 一般有效期7-30天不等",  // 必配, 根据实际填写
+   "profileArn": "这是profileArn, 如果没有请你删除该字段， 配置应该像这个 arn:aws:codewhisperer:us-east-1:111112222233:profile/QWER1QAZSDFGH",  // 可选, 不需要请删除
+   "expiresAt": "这里是请求token过期时间, 一般格式是这样2025-12-31T02:32:45.144Z, 在过期前 kirors 不会请求刷新请求token",  // 必配, 不确定你需要写一个已经过期的UTC时间
+   "authMethod": "这里是认证方式 social/Social 或者是 idc/IdC",  // 必配, 根据你 Token 登录来源决定
+   "clientId": "如果你是 IdC 登录 需要配置这个",  // 可选, 不需要请删除
+   "clientSecret": "如果你是 IdC 登录 需要配置这个"  // 可选, 不需要请删除
 }
 ```
-
+最小启动配置(social):
+```json
+{
+   "refreshToken": "XXXXXXXXXXXXXXXX",
+   "expiresAt": "2025-12-31T02:32:45.144Z",
+   "authMethod": "social"
+}
+```
+最小启动配置(idc):
+```json
+{
+   "refreshToken": "XXXXXXXXXXXXXXXX",
+   "expiresAt": "2025-12-31T02:32:45.144Z",
+   "authMethod": "idc",
+   "clientId": "xxxxxxxxx",
+   "clientSecret": "xxxxxxxxx"
+}
+```
 ### 4. 启动服务
 
 ```bash
@@ -106,17 +135,21 @@ curl http://127.0.0.1:8990/v1/messages \
 | `countTokensApiUrl` | string | - | 外部 count_tokens API 地址（可选） |
 | `countTokensApiKey` | string | - | 外部 count_tokens API 密钥（可选） |
 | `countTokensAuthType` | string | `x-api-key` | 外部 API 认证类型：`x-api-key` 或 `bearer` |
+| `proxyUrl` | string | - | HTTP/SOCKS5 代理地址（可选） |
+| `proxyUsername` | string | - | 代理用户名（可选） |
+| `proxyPassword` | string | - | 代理密码（可选） |
 
 ### credentials.json
 
 | 字段 | 类型 | 描述                      |
 |------|------|-------------------------|
-| `accessToken` | string | OAuth 访问令牌              |
+| `accessToken` | string | OAuth 访问令牌（可选，可自动刷新）    |
 | `refreshToken` | string | OAuth 刷新令牌              |
-| `profileArn` | string | AWS Profile ARN (登录时返回) |
+| `profileArn` | string | AWS Profile ARN（可选，登录时返回） |
 | `expiresAt` | string | Token 过期时间 (RFC3339)    |
-| `authMethod` | string | 认证方式                    |
-| `provider` | string | 认证提供者                   |
+| `authMethod` | string | 认证方式（social 或 idc）      |
+| `clientId` | string | IdC 登录的客户端 ID（可选）      |
+| `clientSecret` | string | IdC 登录的客户端密钥（可选）      |
 
 ## 模型映射
 
