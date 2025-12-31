@@ -2,15 +2,5 @@
   "host": "127.0.0.1",
   "port": 8990,
   "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
-  "region": "us-east-1",
-  "kiroVersion": "0.8.0",
-  "machineId": "如果你需要自定义机器码请将64位机器码填到这里 - 可选 不需要请删除这行配置",
-  "systemVersion": "darwin#24.6.0",
-  "nodeVersion": "22.21.1",
-  "countTokensApiUrl": "https://api.example.com/v1/messages/count_tokens - 可选 不需要请删除这行配置",
-  "countTokensApiKey": "sk-your-count-tokens-api-key - 可选 不需要请删除这行配置",
-  "countTokensAuthType": "x-api-key - 可选 不需要请删除这行配置",
-  "proxyUrl": "http://127.0.0.1:7890 - 可选 不需要请删除这行配置",
-  "proxyUsername": "user - 可选 不需要请删除这行配置",
-  "proxyPassword": "pass - 可选 不需要请删除这行配置"
+  "region": "us-east-1"
 }
