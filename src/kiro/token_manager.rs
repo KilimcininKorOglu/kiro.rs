@@ -11,6 +11,7 @@ use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::model::token_refresh::{
     IdcRefreshRequest, IdcRefreshResponse, RefreshRequest, RefreshResponse,
 };
+use crate::kiro::model::usage_limits::UsageLimitsResponse;
 use crate::model::config::Config;
 
 /// Token 管理器
@@ -59,6 +60,14 @@ impl TokenManager {
             .access_token
             .clone()
             .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))
+    }
+
+    /// 获取使用额度信息
+    ///
+    /// 调用 getUsageLimits API 查询当前账户的使用额度
+    pub async fn get_usage_limits(&mut self) -> anyhow::Result<UsageLimitsResponse> {
+        let token = self.ensure_valid_token().await?;
+        get_usage_limits(&self.credentials, &self.config, &token, self.proxy.as_ref()).await
     }
 }
 
@@ -270,6 +279,80 @@ async fn refresh_idc_token(
     }
 
     Ok(new_credentials)
+}
+
+/// getUsageLimits API 所需的 x-amz-user-agent header 前缀
+const USAGE_LIMITS_AMZ_USER_AGENT_PREFIX: &str = "aws-sdk-js/1.0.0";
+
+/// 获取使用额度信息
+async fn get_usage_limits(
+    credentials: &KiroCredentials,
+    config: &Config,
+    token: &str,
+    proxy: Option<&ProxyConfig>,
+) -> anyhow::Result<UsageLimitsResponse> {
+    tracing::debug!("正在获取使用额度信息...");
+
+    let region = &config.region;
+    let host = format!("q.{}.amazonaws.com", region);
+    let machine_id = machine_id::generate_from_credentials(credentials, config)
+        .ok_or_else(|| anyhow::anyhow!("无法生成 machineId"))?;
+    let kiro_version = &config.kiro_version;
+
+    // 构建 URL
+    let mut url = format!(
+        "https://{}/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST",
+        host
+    );
+
+    // profileArn 是可选的
+    if let Some(profile_arn) = &credentials.profile_arn {
+        url.push_str(&format!(
+            "&profileArn={}",
+            urlencoding::encode(profile_arn)
+        ));
+    }
+
+    // 构建 User-Agent headers
+    let user_agent = format!(
+        "aws-sdk-js/1.0.0 ua/2.1 os/darwin#24.6.0 lang/js md/nodejs#22.21.1 \
+         api/codewhispererruntime#1.0.0 m/N,E KiroIDE-{}-{}",
+        kiro_version, machine_id
+    );
+    let amz_user_agent = format!(
+        "{} KiroIDE-{}-{}",
+        USAGE_LIMITS_AMZ_USER_AGENT_PREFIX, kiro_version, machine_id
+    );
+
+    let client = build_client(proxy, 60)?;
+
+    let response = client
+        .get(&url)
+        .header("x-amz-user-agent", &amz_user_agent)
+        .header("User-Agent", &user_agent)
+        .header("host", &host)
+        .header("amz-sdk-invocation-id", uuid::Uuid::new_v4().to_string())
+        .header("amz-sdk-request", "attempt=1; max=1")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Connection", "close")
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        let error_msg = match status.as_u16() {
+            401 => "认证失败，Token 无效或已过期",
+            403 => "权限不足，无法获取使用额度",
+            429 => "请求过于频繁，已被限流",
+            500..=599 => "服务器错误，AWS 服务暂时不可用",
+            _ => "获取使用额度失败",
+        };
+        bail!("{}: {} {}", error_msg, status, body_text);
+    }
+
+    let data: UsageLimitsResponse = response.json().await?;
+    Ok(data)
 }
 
 #[cfg(test)]
