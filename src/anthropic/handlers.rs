@@ -163,28 +163,25 @@ pub async fn post_messages(
 
 /// 处理流式请求
 async fn handle_stream_request(
-    provider: std::sync::Arc<tokio::sync::Mutex<crate::kiro::provider::KiroProvider>>,
+    provider: std::sync::Arc<crate::kiro::provider::KiroProvider>,
     request_body: &str,
     model: &str,
     input_tokens: i32,
     thinking_enabled: bool,
 ) -> Response {
-    // 调用 Kiro API
-    let response = {
-        let mut provider_guard = provider.lock().await;
-        match provider_guard.call_api_stream(request_body).await {
-            Ok(resp) => resp,
-            Err(e) => {
-                tracing::error!("Kiro API 调用失败: {}", e);
-                return (
-                    StatusCode::BAD_GATEWAY,
-                    Json(ErrorResponse::new(
-                        "api_error",
-                        format!("上游 API 调用失败: {}", e),
-                    )),
-                )
-                    .into_response();
-            }
+    // 调用 Kiro API（支持多凭据故障转移）
+    let response = match provider.call_api_stream(request_body).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            tracing::error!("Kiro API 调用失败: {}", e);
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse::new(
+                    "api_error",
+                    format!("上游 API 调用失败: {}", e),
+                )),
+            )
+                .into_response();
         }
     };
 
@@ -312,27 +309,24 @@ const CONTEXT_WINDOW_SIZE: i32 = 200_000;
 
 /// 处理非流式请求
 async fn handle_non_stream_request(
-    provider: std::sync::Arc<tokio::sync::Mutex<crate::kiro::provider::KiroProvider>>,
+    provider: std::sync::Arc<crate::kiro::provider::KiroProvider>,
     request_body: &str,
     model: &str,
     input_tokens: i32,
 ) -> Response {
-    // 调用 Kiro API
-    let response = {
-        let mut provider_guard = provider.lock().await;
-        match provider_guard.call_api(request_body).await {
-            Ok(resp) => resp,
-            Err(e) => {
-                tracing::error!("Kiro API 调用失败: {}", e);
-                return (
-                    StatusCode::BAD_GATEWAY,
-                    Json(ErrorResponse::new(
-                        "api_error",
-                        format!("上游 API 调用失败: {}", e),
-                    )),
-                )
-                    .into_response();
-            }
+    // 调用 Kiro API（支持多凭据故障转移）
+    let response = match provider.call_api(request_body).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            tracing::error!("Kiro API 调用失败: {}", e);
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse::new(
+                    "api_error",
+                    format!("上游 API 调用失败: {}", e),
+                )),
+            )
+                .into_response();
         }
     };
 

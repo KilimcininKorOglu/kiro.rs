@@ -1,6 +1,7 @@
 //! Kiro OAuth 凭证数据模型
 //!
 //! 支持从 Kiro IDE 的凭证文件加载，使用 Social 认证方式
+//! 支持单凭据和多凭据配置格式
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -37,6 +38,70 @@ pub struct KiroCredentials {
     /// OIDC Client Secret (IdC 认证需要)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
+
+    /// 凭据优先级（数字越小优先级越高，默认为 0）
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero")]
+    pub priority: u32,
+}
+
+/// 判断是否为零（用于跳过序列化）
+fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+/// 凭据配置（支持单对象或数组格式）
+///
+/// 自动识别配置文件格式：
+/// - 单对象格式（旧格式，向后兼容）
+/// - 数组格式（新格式，支持多凭据）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CredentialsConfig {
+    /// 单个凭据（旧格式）
+    Single(KiroCredentials),
+    /// 多凭据数组（新格式）
+    Multiple(Vec<KiroCredentials>),
+}
+
+impl CredentialsConfig {
+    /// 从文件加载凭据配置
+    pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let content = fs::read_to_string(path.as_ref())?;
+        if content.is_empty() {
+            anyhow::bail!("凭证文件为空: {:?}", path.as_ref());
+        }
+        let config = serde_json::from_str(&content)?;
+        Ok(config)
+    }
+
+    /// 转换为按优先级排序的凭据列表
+    pub fn into_sorted_credentials(self) -> Vec<KiroCredentials> {
+        match self {
+            CredentialsConfig::Single(cred) => vec![cred],
+            CredentialsConfig::Multiple(mut creds) => {
+                // 按优先级排序（数字越小优先级越高）
+                creds.sort_by_key(|c| c.priority);
+                creds
+            }
+        }
+    }
+
+    /// 获取凭据数量
+    pub fn len(&self) -> usize {
+        match self {
+            CredentialsConfig::Single(_) => 1,
+            CredentialsConfig::Multiple(creds) => creds.len(),
+        }
+    }
+
+    /// 判断是否为空
+    pub fn is_empty(&self) -> bool {
+        match self {
+            CredentialsConfig::Single(_) => false,
+            CredentialsConfig::Multiple(creds) => creds.is_empty(),
+        }
+    }
 }
 
 impl KiroCredentials {
@@ -110,16 +175,68 @@ mod tests {
             auth_method: Some("social".to_string()),
             client_id: None,
             client_secret: None,
+            priority: 0,
         };
 
         let json = creds.to_pretty_json().unwrap();
         assert!(json.contains("accessToken"));
         assert!(json.contains("authMethod"));
         assert!(!json.contains("refreshToken"));
+        // priority 为 0 时不序列化
+        assert!(!json.contains("priority"));
     }
 
     #[test]
     fn test_default_credentials_path() {
         assert_eq!(KiroCredentials::default_credentials_path(), "credentials.json");
+    }
+
+    #[test]
+    fn test_priority_default() {
+        let json = r#"{"refreshToken": "test"}"#;
+        let creds = KiroCredentials::from_json(json).unwrap();
+        assert_eq!(creds.priority, 0);
+    }
+
+    #[test]
+    fn test_priority_explicit() {
+        let json = r#"{"refreshToken": "test", "priority": 5}"#;
+        let creds = KiroCredentials::from_json(json).unwrap();
+        assert_eq!(creds.priority, 5);
+    }
+
+    #[test]
+    fn test_credentials_config_single() {
+        let json = r#"{"refreshToken": "test", "expiresAt": "2025-12-31T00:00:00Z"}"#;
+        let config: CredentialsConfig = serde_json::from_str(json).unwrap();
+        assert!(matches!(config, CredentialsConfig::Single(_)));
+        assert_eq!(config.len(), 1);
+    }
+
+    #[test]
+    fn test_credentials_config_multiple() {
+        let json = r#"[
+            {"refreshToken": "test1", "priority": 1},
+            {"refreshToken": "test2", "priority": 0}
+        ]"#;
+        let config: CredentialsConfig = serde_json::from_str(json).unwrap();
+        assert!(matches!(config, CredentialsConfig::Multiple(_)));
+        assert_eq!(config.len(), 2);
+    }
+
+    #[test]
+    fn test_credentials_config_priority_sorting() {
+        let json = r#"[
+            {"refreshToken": "t1", "priority": 2},
+            {"refreshToken": "t2", "priority": 0},
+            {"refreshToken": "t3", "priority": 1}
+        ]"#;
+        let config: CredentialsConfig = serde_json::from_str(json).unwrap();
+        let list = config.into_sorted_credentials();
+
+        // 验证按优先级排序
+        assert_eq!(list[0].refresh_token, Some("t2".to_string())); // priority 0
+        assert_eq!(list[1].refresh_token, Some("t3".to_string())); // priority 1
+        assert_eq!(list[2].refresh_token, Some("t1".to_string())); // priority 2
     }
 }

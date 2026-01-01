@@ -1,9 +1,11 @@
 //! Token 管理模块
 //!
 //! 负责 Token 过期检测和刷新，支持 Social 和 IdC 认证方式
+//! 支持单凭据 (TokenManager) 和多凭据 (MultiTokenManager) 管理
 
 use anyhow::bail;
 use chrono::{DateTime, Duration, Utc};
+use parking_lot::Mutex;
 
 use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
@@ -72,7 +74,7 @@ impl TokenManager {
 }
 
 /// 检查 Token 是否在指定时间内过期
-fn is_token_expiring_within(credentials: &KiroCredentials, minutes: i64) -> Option<bool> {
+pub(crate) fn is_token_expiring_within(credentials: &KiroCredentials, minutes: i64) -> Option<bool> {
     credentials
         .expires_at
         .as_ref()
@@ -81,17 +83,17 @@ fn is_token_expiring_within(credentials: &KiroCredentials, minutes: i64) -> Opti
 }
 
 /// 检查 Token 是否已过期（提前 5 分钟判断）
-fn is_token_expired(credentials: &KiroCredentials) -> bool {
+pub(crate) fn is_token_expired(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 5).unwrap_or(true)
 }
 
 /// 检查 Token 是否即将过期（10分钟内）
-fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
+pub(crate) fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 10).unwrap_or(false)
 }
 
 /// 验证 refreshToken 的基本有效性
-fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
+pub(crate) fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
     let refresh_token = credentials
         .refresh_token
         .as_ref()
@@ -116,7 +118,7 @@ fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
 }
 
 /// 刷新 Token
-async fn refresh_token(
+pub(crate) async fn refresh_token(
     credentials: &KiroCredentials,
     config: &Config,
     proxy: Option<&ProxyConfig>,
@@ -285,7 +287,7 @@ async fn refresh_idc_token(
 const USAGE_LIMITS_AMZ_USER_AGENT_PREFIX: &str = "aws-sdk-js/1.0.0";
 
 /// 获取使用额度信息
-async fn get_usage_limits(
+pub(crate) async fn get_usage_limits(
     credentials: &KiroCredentials,
     config: &Config,
     token: &str,
@@ -353,6 +355,277 @@ async fn get_usage_limits(
 
     let data: UsageLimitsResponse = response.json().await?;
     Ok(data)
+}
+
+// ============================================================================
+// 多凭据 Token 管理器
+// ============================================================================
+
+/// 单个凭据条目的状态
+struct CredentialEntry {
+    /// 凭据信息
+    credentials: KiroCredentials,
+    /// API 调用连续失败次数
+    failure_count: u32,
+    /// 是否已禁用
+    disabled: bool,
+}
+
+/// 多凭据 Token 管理器
+///
+/// 支持多个凭据的管理，实现固定优先级 + 故障转移策略
+/// 故障统计基于 API 调用结果，而非 Token 刷新结果
+pub struct MultiTokenManager {
+    config: Config,
+    proxy: Option<ProxyConfig>,
+    /// 按优先级排序的凭据条目列表
+    entries: Mutex<Vec<CredentialEntry>>,
+    /// 当前活动凭据索引
+    current_index: Mutex<usize>,
+}
+
+/// 每个凭据最大 API 调用失败次数
+const MAX_FAILURES_PER_CREDENTIAL: u32 = 3;
+
+impl MultiTokenManager {
+    /// 创建多凭据 Token 管理器
+    ///
+    /// # Arguments
+    /// * `config` - 应用配置
+    /// * `credentials` - 按优先级排序的凭据列表
+    /// * `proxy` - 可选的代理配置
+    pub fn new(
+        config: Config,
+        credentials: Vec<KiroCredentials>,
+        proxy: Option<ProxyConfig>,
+    ) -> anyhow::Result<Self> {
+        if credentials.is_empty() {
+            anyhow::bail!("至少需要一个凭据");
+        }
+
+        let entries: Vec<CredentialEntry> = credentials
+            .into_iter()
+            .map(|cred| CredentialEntry {
+                credentials: cred,
+                failure_count: 0,
+                disabled: false,
+            })
+            .collect();
+
+        Ok(Self {
+            config,
+            proxy,
+            entries: Mutex::new(entries),
+            current_index: Mutex::new(0),
+        })
+    }
+
+    /// 获取配置的引用
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    /// 获取当前活动凭据的克隆
+    pub fn credentials(&self) -> KiroCredentials {
+        let entries = self.entries.lock();
+        let index = *self.current_index.lock();
+        entries[index].credentials.clone()
+    }
+
+    /// 获取凭据总数
+    pub fn total_count(&self) -> usize {
+        self.entries.lock().len()
+    }
+
+    /// 获取可用凭据数量
+    pub fn available_count(&self) -> usize {
+        self.entries.lock().iter().filter(|e| !e.disabled).count()
+    }
+
+    /// 确保获取有效的访问 Token
+    ///
+    /// 如果 Token 过期或即将过期，会自动刷新
+    /// Token 刷新失败时会尝试下一个可用凭据（不计入失败次数）
+    pub async fn ensure_valid_token(&self) -> anyhow::Result<String> {
+        let total = self.total_count();
+        let mut tried_count = 0;
+
+        loop {
+            if tried_count >= total {
+                anyhow::bail!(
+                    "所有凭据均无法获取有效 Token（可用: {}/{}）",
+                    self.available_count(),
+                    total
+                );
+            }
+
+            let (index, credentials) = {
+                let entries = self.entries.lock();
+                let mut current_index = self.current_index.lock();
+
+                // 跳过已禁用的凭据
+                let mut skip_count = 0;
+                while entries[*current_index].disabled {
+                    *current_index = (*current_index + 1) % total;
+                    skip_count += 1;
+                    if skip_count >= total {
+                        drop(entries);
+                        drop(current_index);
+                        anyhow::bail!(
+                            "所有凭据均已禁用（{}/{}）",
+                            self.available_count(),
+                            total
+                        );
+                    }
+                }
+
+                (*current_index, entries[*current_index].credentials.clone())
+            };
+
+            // 尝试获取/刷新 Token
+            match self.try_ensure_token(&credentials).await {
+                Ok(token) => {
+                    // 更新凭据（可能已刷新）
+                    return Ok(token);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "凭据 #{} Token 刷新失败，尝试下一个凭据: {}",
+                        index,
+                        e
+                    );
+
+                    // Token 刷新失败，切换到下一个凭据（不计入失败次数）
+                    let mut current_index = self.current_index.lock();
+                    *current_index = (*current_index + 1) % total;
+                    tried_count += 1;
+                }
+            }
+        }
+    }
+
+    /// 尝试使用指定凭据获取有效 Token
+    async fn try_ensure_token(&self, credentials: &KiroCredentials) -> anyhow::Result<String> {
+        let mut creds = credentials.clone();
+
+        if is_token_expired(&creds) || is_token_expiring_soon(&creds) {
+            creds = refresh_token(&creds, &self.config, self.proxy.as_ref()).await?;
+
+            if is_token_expired(&creds) {
+                anyhow::bail!("刷新后的 Token 仍然无效或已过期");
+            }
+
+            // 更新凭据
+            let mut entries = self.entries.lock();
+            let index = *self.current_index.lock();
+            entries[index].credentials = creds.clone();
+        }
+
+        creds
+            .access_token
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))
+    }
+
+    /// 报告当前凭据 API 调用成功
+    ///
+    /// 重置失败计数
+    pub fn report_success(&self) {
+        let mut entries = self.entries.lock();
+        let index = *self.current_index.lock();
+        entries[index].failure_count = 0;
+        tracing::debug!("凭据 #{} API 调用成功", index);
+    }
+
+    /// 报告当前凭据 API 调用失败
+    ///
+    /// 增加失败计数，达到阈值时禁用凭据并切换到下一个
+    /// 返回是否还有可用凭据可以重试
+    pub fn report_failure(&self) -> bool {
+        let total = {
+            let entries = self.entries.lock();
+            entries.len()
+        };
+
+        let mut entries = self.entries.lock();
+        let mut current_index = self.current_index.lock();
+        let index = *current_index;
+
+        entries[index].failure_count += 1;
+        let failure_count = entries[index].failure_count;
+
+        tracing::warn!(
+            "凭据 #{} API 调用失败（{}/{}）",
+            index,
+            failure_count,
+            MAX_FAILURES_PER_CREDENTIAL
+        );
+
+        if failure_count >= MAX_FAILURES_PER_CREDENTIAL {
+            entries[index].disabled = true;
+            tracing::error!(
+                "凭据 #{} 已连续失败 {} 次，已被禁用",
+                index,
+                failure_count
+            );
+
+            // 切换到下一个可用凭据
+            let available = entries.iter().filter(|e| !e.disabled).count();
+            if available == 0 {
+                tracing::error!("所有凭据均已禁用！");
+                return false;
+            }
+
+            // 找到下一个未禁用的凭据
+            for _ in 0..total {
+                *current_index = (*current_index + 1) % total;
+                if !entries[*current_index].disabled {
+                    tracing::info!(
+                        "已切换到凭据 #{}（优先级 {}）",
+                        *current_index,
+                        entries[*current_index].credentials.priority
+                    );
+                    break;
+                }
+            }
+        }
+
+        // 检查是否还有可用凭据
+        entries.iter().any(|e| !e.disabled)
+    }
+
+    /// 切换到下一个可用凭据
+    ///
+    /// 返回是否成功切换
+    pub fn switch_to_next(&self) -> bool {
+        let entries = self.entries.lock();
+        let mut current_index = self.current_index.lock();
+        let total = entries.len();
+
+        let start_index = *current_index;
+        for _ in 0..total {
+            *current_index = (*current_index + 1) % total;
+            if !entries[*current_index].disabled {
+                if *current_index != start_index {
+                    tracing::info!(
+                        "已切换到凭据 #{}（优先级 {}）",
+                        *current_index,
+                        entries[*current_index].credentials.priority
+                    );
+                }
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// 获取使用额度信息
+    pub async fn get_usage_limits(&self) -> anyhow::Result<UsageLimitsResponse> {
+        let token = self.ensure_valid_token().await?;
+        let credentials = self.credentials();
+        get_usage_limits(&credentials, &self.config, &token, self.proxy.as_ref()).await
+    }
 }
 
 #[cfg(test)]
@@ -425,5 +698,95 @@ mod tests {
         credentials.refresh_token = Some("a".repeat(150));
         let result = validate_refresh_token(&credentials);
         assert!(result.is_ok());
+    }
+
+    // MultiTokenManager 测试
+
+    #[test]
+    fn test_multi_token_manager_new() {
+        let config = Config::default();
+        let mut cred1 = KiroCredentials::default();
+        cred1.priority = 0;
+        let mut cred2 = KiroCredentials::default();
+        cred2.priority = 1;
+
+        let manager = MultiTokenManager::new(config, vec![cred1, cred2], None).unwrap();
+        assert_eq!(manager.total_count(), 2);
+        assert_eq!(manager.available_count(), 2);
+    }
+
+    #[test]
+    fn test_multi_token_manager_empty_credentials() {
+        let config = Config::default();
+        let result = MultiTokenManager::new(config, vec![], None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multi_token_manager_report_failure() {
+        let config = Config::default();
+        let cred1 = KiroCredentials::default();
+        let cred2 = KiroCredentials::default();
+
+        let manager = MultiTokenManager::new(config, vec![cred1, cred2], None).unwrap();
+
+        // 前两次失败不会禁用
+        assert!(manager.report_failure());
+        assert!(manager.report_failure());
+        assert_eq!(manager.available_count(), 2);
+
+        // 第三次失败会禁用第一个凭据
+        assert!(manager.report_failure());
+        assert_eq!(manager.available_count(), 1);
+
+        // 继续失败第二个凭据
+        assert!(manager.report_failure());
+        assert!(manager.report_failure());
+        assert!(!manager.report_failure()); // 所有凭据都禁用了
+        assert_eq!(manager.available_count(), 0);
+    }
+
+    #[test]
+    fn test_multi_token_manager_report_success() {
+        let config = Config::default();
+        let cred = KiroCredentials::default();
+
+        let manager = MultiTokenManager::new(config, vec![cred], None).unwrap();
+
+        // 失败两次
+        manager.report_failure();
+        manager.report_failure();
+
+        // 成功后重置计数
+        manager.report_success();
+
+        // 再失败两次不会禁用
+        manager.report_failure();
+        manager.report_failure();
+        assert_eq!(manager.available_count(), 1);
+    }
+
+    #[test]
+    fn test_multi_token_manager_switch_to_next() {
+        let config = Config::default();
+        let mut cred1 = KiroCredentials::default();
+        cred1.refresh_token = Some("token1".to_string());
+        let mut cred2 = KiroCredentials::default();
+        cred2.refresh_token = Some("token2".to_string());
+
+        let manager = MultiTokenManager::new(config, vec![cred1, cred2], None).unwrap();
+
+        // 初始是第一个凭据
+        assert_eq!(
+            manager.credentials().refresh_token,
+            Some("token1".to_string())
+        );
+
+        // 切换到下一个
+        assert!(manager.switch_to_next());
+        assert_eq!(
+            manager.credentials().refresh_token,
+            Some("token2".to_string())
+        );
     }
 }

@@ -2,31 +2,34 @@
 //!
 //! 核心组件，负责与 Kiro API 通信
 //! 支持流式和非流式请求
+//! 支持多凭据故障转移和重试
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST};
 use reqwest::Client;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
-use crate::kiro::token_manager::TokenManager;
+use crate::kiro::token_manager::MultiTokenManager;
 
 /// Kiro API Provider
 ///
 /// 核心组件，负责与 Kiro API 通信
+/// 支持多凭据故障转移和重试机制
 pub struct KiroProvider {
-    token_manager: TokenManager,
+    token_manager: Arc<MultiTokenManager>,
     client: Client,
 }
 
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
-    pub fn new(token_manager: TokenManager) -> Self {
+    pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
         Self::with_proxy(token_manager, None)
     }
 
     /// 创建带代理配置的 KiroProvider 实例
-    pub fn with_proxy(token_manager: TokenManager, proxy: Option<ProxyConfig>) -> Self {
+    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: Option<ProxyConfig>) -> Self {
         let client = build_client(proxy.as_ref(), 720) // 12 分钟超时
             .expect("创建 HTTP 客户端失败");
 
@@ -34,6 +37,11 @@ impl KiroProvider {
             token_manager,
             client,
         }
+    }
+
+    /// 获取 token_manager 的引用
+    pub fn token_manager(&self) -> &MultiTokenManager {
+        &self.token_manager
     }
 
     /// 获取 API 基础 URL
@@ -54,7 +62,7 @@ impl KiroProvider {
         let credentials = self.token_manager.credentials();
         let config = self.token_manager.config();
 
-        let machine_id = machine_id::generate_from_credentials(credentials, config)
+        let machine_id = machine_id::generate_from_credentials(&credentials, config)
             .ok_or_else(|| anyhow::anyhow!("无法生成 machine_id，请检查凭证配置"))?;
 
         let kiro_version = &config.kiro_version;
@@ -104,63 +112,130 @@ impl KiroProvider {
 
     /// 发送非流式 API 请求
     ///
+    /// 支持多凭据故障转移：
+    /// - 400 Bad Request: 直接返回错误，不计入凭据失败
+    /// - 其他错误: 计入失败次数，达到阈值后切换凭据重试
+    ///
     /// # Arguments
     /// * `request_body` - JSON 格式的请求体字符串
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，不做解析
-    pub async fn call_api(&mut self, request_body: &str) -> anyhow::Result<reqwest::Response> {
-        let token = self.token_manager.ensure_valid_token().await?;
-        let url = self.base_url();
-        let headers = self.build_headers(&token)?;
-
-        let response = self
-            .client
-            .post(&url)
-            .headers(headers)
-            .body(request_body.to_string())
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("API 请求失败: {} {}", status, body);
-        }
-
-        Ok(response)
+    pub async fn call_api(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
+        self.call_api_with_retry(request_body, false).await
     }
 
     /// 发送流式 API 请求
+    ///
+    /// 支持多凭据故障转移：
+    /// - 400 Bad Request: 直接返回错误，不计入凭据失败
+    /// - 其他错误: 计入失败次数，达到阈值后切换凭据重试
     ///
     /// # Arguments
     /// * `request_body` - JSON 格式的请求体字符串
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，调用方负责处理流式数据
-    pub async fn call_api_stream(
-        &mut self,
+    pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
+        self.call_api_with_retry(request_body, true).await
+    }
+
+    /// 内部方法：带重试逻辑的 API 调用
+    async fn call_api_with_retry(
+        &self,
         request_body: &str,
+        is_stream: bool,
     ) -> anyhow::Result<reqwest::Response> {
-        let token = self.token_manager.ensure_valid_token().await?;
-        let url = self.base_url();
-        let headers = self.build_headers(&token)?;
+        let max_retries = self.token_manager.total_count();
+        let mut last_error: Option<anyhow::Error> = None;
 
-        let response = self
-            .client
-            .post(&url)
-            .headers(headers)
-            .body(request_body.to_string())
-            .send()
-            .await?;
+        for attempt in 0..max_retries {
+            // 获取有效 Token
+            let token = match self.token_manager.ensure_valid_token().await {
+                Ok(t) => t,
+                Err(e) => {
+                    last_error = Some(e);
+                    continue;
+                }
+            };
 
-        if !response.status().is_success() {
+            let url = self.base_url();
+            let headers = match self.build_headers(&token) {
+                Ok(h) => h,
+                Err(e) => {
+                    last_error = Some(e);
+                    continue;
+                }
+            };
+
+            // 发送请求
+            let response = match self
+                .client
+                .post(&url)
+                .headers(headers)
+                .body(request_body.to_string())
+                .send()
+                .await
+            {
+                Ok(resp) => resp,
+                Err(e) => {
+                    tracing::warn!(
+                        "API 请求发送失败（尝试 {}/{}）: {}",
+                        attempt + 1,
+                        max_retries,
+                        e
+                    );
+                    // 网络错误，报告失败并重试
+                    if !self.token_manager.report_failure() {
+                        return Err(e.into());
+                    }
+                    last_error = Some(e.into());
+                    continue;
+                }
+            };
+
             let status = response.status();
+
+            // 成功响应
+            if status.is_success() {
+                self.token_manager.report_success();
+                return Ok(response);
+            }
+
+            // 400 Bad Request - 不算凭据错误，直接返回
+            if status.as_u16() == 400 {
+                let body = response.text().await.unwrap_or_default();
+                let api_type = if is_stream { "流式" } else { "非流式" };
+                anyhow::bail!("{} API 请求失败: {} {}", api_type, status, body);
+            }
+
+            // 其他错误 - 记录失败并可能重试
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("流式 API 请求失败: {} {}", status, body);
+            tracing::warn!(
+                "API 请求失败（尝试 {}/{}）: {} {}",
+                attempt + 1,
+                max_retries,
+                status,
+                body
+            );
+
+            let has_available = self.token_manager.report_failure();
+            if !has_available {
+                let api_type = if is_stream { "流式" } else { "非流式" };
+                anyhow::bail!(
+                    "{} API 请求失败（所有凭据已用尽）: {} {}",
+                    api_type,
+                    status,
+                    body
+                );
+            }
+
+            last_error = Some(anyhow::anyhow!("{} API 请求失败: {} {}",
+                if is_stream { "流式" } else { "非流式" }, status, body));
         }
 
-        Ok(response)
+        // 所有重试都失败
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("API 请求失败：未知错误")))
     }
 }
 
@@ -170,12 +245,16 @@ mod tests {
     use crate::kiro::model::credentials::KiroCredentials;
     use crate::model::config::Config;
 
+    fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
+        let tm = MultiTokenManager::new(config, vec![credentials], None).unwrap();
+        KiroProvider::new(Arc::new(tm))
+    }
+
     #[test]
     fn test_base_url() {
         let config = Config::default();
         let credentials = KiroCredentials::default();
-        let tm = TokenManager::new(config, credentials, None);
-        let provider = KiroProvider::new(tm);
+        let provider = create_test_provider(config, credentials);
         assert!(provider.base_url().contains("amazonaws.com"));
         assert!(provider.base_url().contains("generateAssistantResponse"));
     }
@@ -185,8 +264,7 @@ mod tests {
         let mut config = Config::default();
         config.region = "us-east-1".to_string();
         let credentials = KiroCredentials::default();
-        let tm = TokenManager::new(config, credentials, None);
-        let provider = KiroProvider::new(tm);
+        let provider = create_test_provider(config, credentials);
         assert_eq!(provider.base_domain(), "q.us-east-1.amazonaws.com");
     }
 
@@ -200,8 +278,7 @@ mod tests {
         credentials.profile_arn = Some("arn:aws:sso::123456789:profile/test".to_string());
         credentials.refresh_token = Some("a".repeat(150));
 
-        let tm = TokenManager::new(config, credentials, None);
-        let provider = KiroProvider::new(tm);
+        let provider = create_test_provider(config, credentials);
         let headers = provider.build_headers("test_token").unwrap();
 
         assert_eq!(headers.get(CONTENT_TYPE).unwrap(), "application/json");

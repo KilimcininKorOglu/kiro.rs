@@ -9,7 +9,6 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Json, Response},
 };
-use tokio::sync::Mutex;
 
 use crate::kiro::provider::KiroProvider;
 
@@ -21,7 +20,8 @@ pub struct AppState {
     /// API 密钥
     pub api_key: String,
     /// Kiro Provider（可选，用于实际 API 调用）
-    pub kiro_provider: Option<Arc<Mutex<KiroProvider>>>,
+    /// 内部使用 MultiTokenManager，已支持线程安全的多凭据管理
+    pub kiro_provider: Option<Arc<KiroProvider>>,
     /// Profile ARN（可选，用于请求）
     pub profile_arn: Option<String>,
 }
@@ -38,7 +38,7 @@ impl AppState {
 
     /// 设置 KiroProvider
     pub fn with_kiro_provider(mut self, provider: KiroProvider) -> Self {
-        self.kiro_provider = Some(Arc::new(Mutex::new(provider)));
+        self.kiro_provider = Some(Arc::new(provider));
         self
     }
 

@@ -4,10 +4,12 @@ mod kiro;
 mod model;
 pub mod token;
 
+use std::sync::Arc;
+
 use clap::Parser;
-use kiro::model::credentials::KiroCredentials;
+use kiro::model::credentials::{CredentialsConfig, KiroCredentials};
 use kiro::provider::KiroProvider;
-use kiro::token_manager::TokenManager;
+use kiro::token_manager::MultiTokenManager;
 use model::config::Config;
 use model::arg::Args;
 
@@ -31,14 +33,20 @@ async fn main() {
         std::process::exit(1);
     });
 
-    // 加载凭证
+    // 加载凭证（支持单对象或数组格式）
     let credentials_path = args.credentials.unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
-    let credentials = KiroCredentials::load(&credentials_path).unwrap_or_else(|e| {
+    let credentials_config = CredentialsConfig::load(&credentials_path).unwrap_or_else(|e| {
         tracing::error!("加载凭证失败: {}", e);
         std::process::exit(1);
     });
 
-    tracing::debug!("凭证已加载: {:?}", credentials);
+    // 转换为按优先级排序的凭据列表
+    let credentials_list = credentials_config.into_sorted_credentials();
+    tracing::info!("已加载 {} 个凭据配置", credentials_list.len());
+
+    // 获取第一个凭据用于日志显示
+    let first_credentials = credentials_list.first().cloned().unwrap_or_default();
+    tracing::debug!("主凭证: {:?}", first_credentials);
 
     // 获取 API Key
     let api_key = config.api_key.clone().unwrap_or_else(|| {
@@ -59,9 +67,14 @@ async fn main() {
         tracing::info!("已配置 HTTP 代理: {}", config.proxy_url.as_ref().unwrap());
     }
 
-    // 创建 KiroProvider
-    let token_manager = TokenManager::new(config.clone(), credentials.clone(), proxy_config.clone());
-    let kiro_provider = KiroProvider::with_proxy(token_manager, proxy_config.clone());
+    // 创建 MultiTokenManager 和 KiroProvider
+    let token_manager = MultiTokenManager::new(config.clone(), credentials_list, proxy_config.clone())
+        .unwrap_or_else(|e| {
+            tracing::error!("创建 Token 管理器失败: {}", e);
+            std::process::exit(1);
+        });
+    let token_manager = Arc::new(token_manager);
+    let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
 
     // 初始化 count_tokens 配置
     token::init_config(token::CountTokensConfig {
@@ -71,8 +84,8 @@ async fn main() {
         proxy: proxy_config,
     });
 
-    // 构建路由（从凭据获取 profile_arn）
-    let app = anthropic::create_router_with_provider(&api_key, Some(kiro_provider), credentials.profile_arn.clone());
+    // 构建路由（从第一个凭据获取 profile_arn）
+    let app = anthropic::create_router_with_provider(&api_key, Some(kiro_provider), first_credentials.profile_arn.clone());
 
     // 启动服务器
     let addr = format!("{}:{}", config.host, config.port);
