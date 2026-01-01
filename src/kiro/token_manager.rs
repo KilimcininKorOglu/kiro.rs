@@ -387,6 +387,20 @@ pub struct MultiTokenManager {
 /// 每个凭据最大 API 调用失败次数
 const MAX_FAILURES_PER_CREDENTIAL: u32 = 3;
 
+/// API 调用上下文
+///
+/// 绑定特定凭据的调用上下文，确保 token、credentials 和 index 的一致性
+/// 用于解决并发调用时 current_index 竞态问题
+#[derive(Clone)]
+pub struct CallContext {
+    /// 凭据索引（用于 report_success/report_failure）
+    pub index: usize,
+    /// 凭据信息（用于构建请求头）
+    pub credentials: KiroCredentials,
+    /// 访问 Token
+    pub token: String,
+}
+
 impl MultiTokenManager {
     /// 创建多凭据 Token 管理器
     ///
@@ -442,11 +456,14 @@ impl MultiTokenManager {
         self.entries.lock().iter().filter(|e| !e.disabled).count()
     }
 
-    /// 确保获取有效的访问 Token
+    /// 获取 API 调用上下文
+    ///
+    /// 返回绑定了 index、credentials 和 token 的调用上下文
+    /// 确保整个 API 调用过程中使用一致的凭据信息
     ///
     /// 如果 Token 过期或即将过期，会自动刷新
     /// Token 刷新失败时会尝试下一个可用凭据（不计入失败次数）
-    pub async fn ensure_valid_token(&self) -> anyhow::Result<String> {
+    pub async fn acquire_context(&self) -> anyhow::Result<CallContext> {
         let total = self.total_count();
         let mut tried_count = 0;
 
@@ -482,11 +499,10 @@ impl MultiTokenManager {
                 (*current_index, entries[*current_index].credentials.clone())
             };
 
-            // 尝试获取/刷新 Token
-            match self.try_ensure_token(&credentials).await {
-                Ok(token) => {
-                    // 更新凭据（可能已刷新）
-                    return Ok(token);
+            // 尝试获取/刷新 Token（传入 index 确保更新正确的条目）
+            match self.try_ensure_token(index, &credentials).await {
+                Ok(ctx) => {
+                    return Ok(ctx);
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -505,7 +521,15 @@ impl MultiTokenManager {
     }
 
     /// 尝试使用指定凭据获取有效 Token
-    async fn try_ensure_token(&self, credentials: &KiroCredentials) -> anyhow::Result<String> {
+    ///
+    /// # Arguments
+    /// * `index` - 凭据索引，用于更新正确的条目
+    /// * `credentials` - 凭据信息
+    async fn try_ensure_token(
+        &self,
+        index: usize,
+        credentials: &KiroCredentials,
+    ) -> anyhow::Result<CallContext> {
         let mut creds = credentials.clone();
 
         if is_token_expired(&creds) || is_token_expiring_soon(&creds) {
@@ -515,41 +539,52 @@ impl MultiTokenManager {
                 anyhow::bail!("刷新后的 Token 仍然无效或已过期");
             }
 
-            // 更新凭据
+            // 使用传入的 index 更新凭据，避免竞态条件
             let mut entries = self.entries.lock();
-            let index = *self.current_index.lock();
             entries[index].credentials = creds.clone();
         }
 
-        creds
+        let token = creds
             .access_token
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))
+            .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))?;
+
+        Ok(CallContext {
+            index,
+            credentials: creds,
+            token,
+        })
     }
 
-    /// 报告当前凭据 API 调用成功
+    /// 报告指定凭据 API 调用成功
     ///
-    /// 重置失败计数
-    pub fn report_success(&self) {
+    /// 重置该凭据的失败计数
+    ///
+    /// # Arguments
+    /// * `index` - 凭据索引（来自 CallContext）
+    pub fn report_success(&self, index: usize) {
         let mut entries = self.entries.lock();
-        let index = *self.current_index.lock();
-        entries[index].failure_count = 0;
-        tracing::debug!("凭据 #{} API 调用成功", index);
+        if index < entries.len() {
+            entries[index].failure_count = 0;
+            tracing::debug!("凭据 #{} API 调用成功", index);
+        }
     }
 
-    /// 报告当前凭据 API 调用失败
+    /// 报告指定凭据 API 调用失败
     ///
     /// 增加失败计数，达到阈值时禁用凭据并切换到下一个
     /// 返回是否还有可用凭据可以重试
-    pub fn report_failure(&self) -> bool {
-        let total = {
-            let entries = self.entries.lock();
-            entries.len()
-        };
-
+    ///
+    /// # Arguments
+    /// * `index` - 凭据索引（来自 CallContext）
+    pub fn report_failure(&self, index: usize) -> bool {
         let mut entries = self.entries.lock();
         let mut current_index = self.current_index.lock();
-        let index = *current_index;
+        let total = entries.len();
+
+        if index >= total {
+            return entries.iter().any(|e| !e.disabled);
+        }
 
         entries[index].failure_count += 1;
         let failure_count = entries[index].failure_count;
@@ -622,9 +657,8 @@ impl MultiTokenManager {
 
     /// 获取使用额度信息
     pub async fn get_usage_limits(&self) -> anyhow::Result<UsageLimitsResponse> {
-        let token = self.ensure_valid_token().await?;
-        let credentials = self.credentials();
-        get_usage_limits(&credentials, &self.config, &token, self.proxy.as_ref()).await
+        let ctx = self.acquire_context().await?;
+        get_usage_limits(&ctx.credentials, &self.config, &ctx.token, self.proxy.as_ref()).await
     }
 }
 
@@ -730,19 +764,19 @@ mod tests {
 
         let manager = MultiTokenManager::new(config, vec![cred1, cred2], None).unwrap();
 
-        // 前两次失败不会禁用
-        assert!(manager.report_failure());
-        assert!(manager.report_failure());
+        // 前两次失败不会禁用（使用 index 0）
+        assert!(manager.report_failure(0));
+        assert!(manager.report_failure(0));
         assert_eq!(manager.available_count(), 2);
 
         // 第三次失败会禁用第一个凭据
-        assert!(manager.report_failure());
+        assert!(manager.report_failure(0));
         assert_eq!(manager.available_count(), 1);
 
-        // 继续失败第二个凭据
-        assert!(manager.report_failure());
-        assert!(manager.report_failure());
-        assert!(!manager.report_failure()); // 所有凭据都禁用了
+        // 继续失败第二个凭据（使用 index 1）
+        assert!(manager.report_failure(1));
+        assert!(manager.report_failure(1));
+        assert!(!manager.report_failure(1)); // 所有凭据都禁用了
         assert_eq!(manager.available_count(), 0);
     }
 
@@ -753,16 +787,16 @@ mod tests {
 
         let manager = MultiTokenManager::new(config, vec![cred], None).unwrap();
 
-        // 失败两次
-        manager.report_failure();
-        manager.report_failure();
+        // 失败两次（使用 index 0）
+        manager.report_failure(0);
+        manager.report_failure(0);
 
-        // 成功后重置计数
-        manager.report_success();
+        // 成功后重置计数（使用 index 0）
+        manager.report_success(0);
 
         // 再失败两次不会禁用
-        manager.report_failure();
-        manager.report_failure();
+        manager.report_failure(0);
+        manager.report_failure(0);
         assert_eq!(manager.available_count(), 1);
     }
 

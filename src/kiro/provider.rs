@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
-use crate::kiro::token_manager::MultiTokenManager;
+use crate::kiro::model::credentials::KiroCredentials;
+use crate::kiro::token_manager::{CallContext, MultiTokenManager};
 
 /// Kiro API Provider
 ///
@@ -58,11 +59,13 @@ impl KiroProvider {
     }
 
     /// 构建请求头
-    fn build_headers(&self, token: &str) -> anyhow::Result<HeaderMap> {
-        let credentials = self.token_manager.credentials();
+    ///
+    /// # Arguments
+    /// * `ctx` - API 调用上下文，包含凭据和 token
+    fn build_headers(&self, ctx: &CallContext) -> anyhow::Result<HeaderMap> {
         let config = self.token_manager.config();
 
-        let machine_id = machine_id::generate_from_credentials(&credentials, config)
+        let machine_id = machine_id::generate_from_credentials(&ctx.credentials, config)
             .ok_or_else(|| anyhow::anyhow!("无法生成 machine_id，请检查凭证配置"))?;
 
         let kiro_version = &config.kiro_version;
@@ -103,7 +106,7 @@ impl KiroProvider {
         );
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
+            HeaderValue::from_str(&format!("Bearer {}", ctx.token)).unwrap(),
         );
         headers.insert(CONNECTION, HeaderValue::from_static("close"));
 
@@ -150,9 +153,9 @@ impl KiroProvider {
         let mut last_error: Option<anyhow::Error> = None;
 
         for attempt in 0..max_retries {
-            // 获取有效 Token
-            let token = match self.token_manager.ensure_valid_token().await {
-                Ok(t) => t,
+            // 获取调用上下文（绑定 index、credentials、token）
+            let ctx = match self.token_manager.acquire_context().await {
+                Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
                     continue;
@@ -160,7 +163,7 @@ impl KiroProvider {
             };
 
             let url = self.base_url();
-            let headers = match self.build_headers(&token) {
+            let headers = match self.build_headers(&ctx) {
                 Ok(h) => h,
                 Err(e) => {
                     last_error = Some(e);
@@ -185,8 +188,8 @@ impl KiroProvider {
                         max_retries,
                         e
                     );
-                    // 网络错误，报告失败并重试
-                    if !self.token_manager.report_failure() {
+                    // 网络错误，报告失败并重试（使用绑定的 index）
+                    if !self.token_manager.report_failure(ctx.index) {
                         return Err(e.into());
                     }
                     last_error = Some(e.into());
@@ -198,7 +201,7 @@ impl KiroProvider {
 
             // 成功响应
             if status.is_success() {
-                self.token_manager.report_success();
+                self.token_manager.report_success(ctx.index);
                 return Ok(response);
             }
 
@@ -209,7 +212,7 @@ impl KiroProvider {
                 anyhow::bail!("{} API 请求失败: {} {}", api_type, status, body);
             }
 
-            // 其他错误 - 记录失败并可能重试
+            // 其他错误 - 记录失败并可能重试（使用绑定的 index）
             let body = response.text().await.unwrap_or_default();
             tracing::warn!(
                 "API 请求失败（尝试 {}/{}）: {} {}",
@@ -219,7 +222,7 @@ impl KiroProvider {
                 body
             );
 
-            let has_available = self.token_manager.report_failure();
+            let has_available = self.token_manager.report_failure(ctx.index);
             if !has_available {
                 let api_type = if is_stream { "流式" } else { "非流式" };
                 anyhow::bail!(
@@ -242,7 +245,7 @@ impl KiroProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kiro::model::credentials::KiroCredentials;
+    use crate::kiro::token_manager::CallContext;
     use crate::model::config::Config;
 
     fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
@@ -278,8 +281,13 @@ mod tests {
         credentials.profile_arn = Some("arn:aws:sso::123456789:profile/test".to_string());
         credentials.refresh_token = Some("a".repeat(150));
 
-        let provider = create_test_provider(config, credentials);
-        let headers = provider.build_headers("test_token").unwrap();
+        let provider = create_test_provider(config, credentials.clone());
+        let ctx = CallContext {
+            index: 0,
+            credentials,
+            token: "test_token".to_string(),
+        };
+        let headers = provider.build_headers(&ctx).unwrap();
 
         assert_eq!(headers.get(CONTENT_TYPE).unwrap(), "application/json");
         assert_eq!(
