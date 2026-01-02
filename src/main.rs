@@ -1,5 +1,6 @@
 mod admin;
 mod anthropic;
+mod common;
 mod http_client;
 mod kiro;
 mod model;
