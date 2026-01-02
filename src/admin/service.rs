@@ -132,14 +132,33 @@ impl AdminService {
         total: usize,
     ) -> AdminServiceError {
         let msg = e.to_string();
+
+        // 1. 索引越界
         if msg.contains("索引超出范围") {
-            AdminServiceError::NotFound { index, total }
-        } else if msg.contains("access_token") || msg.contains("刷新") {
-            // Token 相关的内部状态错误
-            AdminServiceError::InternalError(msg)
-        } else {
-            // 网络/API 调用失败归类为上游错误
+            return AdminServiceError::NotFound { index, total };
+        }
+
+        // 2. 上游服务错误特征：HTTP 响应错误或网络错误
+        let is_upstream_error =
+            // HTTP 响应错误（来自 refresh_*_token 的错误消息）
+            msg.contains("凭证已过期或无效") ||
+            msg.contains("权限不足") ||
+            msg.contains("已被限流") ||
+            msg.contains("服务器错误") ||
+            msg.contains("Token 刷新失败") ||
+            msg.contains("暂时不可用") ||
+            // 网络错误（reqwest 错误）
+            msg.contains("error trying to connect") ||
+            msg.contains("connection") ||
+            msg.contains("timeout") ||
+            msg.contains("timed out");
+
+        if is_upstream_error {
             AdminServiceError::UpstreamError(msg)
+        } else {
+            // 3. 默认归类为内部错误（本地验证失败、配置错误等）
+            // 包括：缺少 refreshToken、refreshToken 已被截断、无法生成 machineId 等
+            AdminServiceError::InternalError(msg)
         }
     }
 }
