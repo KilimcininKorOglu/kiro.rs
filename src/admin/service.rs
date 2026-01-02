@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::kiro::token_manager::MultiTokenManager;
 
+use super::error::AdminServiceError;
 use super::types::{BalanceResponse, CredentialStatusItem, CredentialsStatusResponse};
 
 /// Admin 服务
@@ -46,11 +47,15 @@ impl AdminService {
     }
 
     /// 设置凭据禁用状态
-    pub fn set_disabled(&self, index: usize, disabled: bool) -> anyhow::Result<()> {
+    pub fn set_disabled(&self, index: usize, disabled: bool) -> Result<(), AdminServiceError> {
         // 先获取当前凭据索引，用于判断是否需要切换
-        let current_index = self.token_manager.snapshot().current_index;
+        let snapshot = self.token_manager.snapshot();
+        let current_index = snapshot.current_index;
+        let total = snapshot.total;
 
-        self.token_manager.set_disabled(index, disabled)?;
+        self.token_manager
+            .set_disabled(index, disabled)
+            .map_err(|e| self.classify_error(e, index, total))?;
 
         // 只有禁用的是当前凭据时才尝试切换到下一个
         if disabled && index == current_index {
@@ -60,18 +65,29 @@ impl AdminService {
     }
 
     /// 设置凭据优先级
-    pub fn set_priority(&self, index: usize, priority: u32) -> anyhow::Result<()> {
-        self.token_manager.set_priority(index, priority)
+    pub fn set_priority(&self, index: usize, priority: u32) -> Result<(), AdminServiceError> {
+        let total = self.token_manager.snapshot().total;
+        self.token_manager
+            .set_priority(index, priority)
+            .map_err(|e| self.classify_error(e, index, total))
     }
 
     /// 重置失败计数并重新启用
-    pub fn reset_and_enable(&self, index: usize) -> anyhow::Result<()> {
-        self.token_manager.reset_and_enable(index)
+    pub fn reset_and_enable(&self, index: usize) -> Result<(), AdminServiceError> {
+        let total = self.token_manager.snapshot().total;
+        self.token_manager
+            .reset_and_enable(index)
+            .map_err(|e| self.classify_error(e, index, total))
     }
 
     /// 获取凭据余额
-    pub async fn get_balance(&self, index: usize) -> anyhow::Result<BalanceResponse> {
-        let usage = self.token_manager.get_usage_limits_for(index).await?;
+    pub async fn get_balance(&self, index: usize) -> Result<BalanceResponse, AdminServiceError> {
+        let total = self.token_manager.snapshot().total;
+        let usage = self
+            .token_manager
+            .get_usage_limits_for(index)
+            .await
+            .map_err(|e| self.classify_balance_error(e, index, total))?;
 
         let current_usage = usage.current_usage();
         let usage_limit = usage.usage_limit();
@@ -91,5 +107,39 @@ impl AdminService {
             usage_percentage,
             next_reset_at: usage.next_date_reset,
         })
+    }
+
+    /// 分类简单操作错误（set_disabled, set_priority, reset_and_enable）
+    fn classify_error(
+        &self,
+        e: anyhow::Error,
+        index: usize,
+        total: usize,
+    ) -> AdminServiceError {
+        let msg = e.to_string();
+        if msg.contains("索引超出范围") {
+            AdminServiceError::NotFound { index, total }
+        } else {
+            AdminServiceError::InternalError(msg)
+        }
+    }
+
+    /// 分类余额查询错误（可能涉及上游 API 调用）
+    fn classify_balance_error(
+        &self,
+        e: anyhow::Error,
+        index: usize,
+        total: usize,
+    ) -> AdminServiceError {
+        let msg = e.to_string();
+        if msg.contains("索引超出范围") {
+            AdminServiceError::NotFound { index, total }
+        } else if msg.contains("access_token") || msg.contains("刷新") {
+            // Token 相关的内部状态错误
+            AdminServiceError::InternalError(msg)
+        } else {
+            // 网络/API 调用失败归类为上游错误
+            AdminServiceError::UpstreamError(msg)
+        }
     }
 }

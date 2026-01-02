@@ -136,4 +136,8 @@ impl AdminErrorResponse {
     pub fn api_error(message: impl Into<String>) -> Self {
         Self::new("api_error", message)
     }
+
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        Self::new("internal_error", message)
+    }
 }

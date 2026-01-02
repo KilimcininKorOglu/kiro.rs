@@ -2,14 +2,13 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::IntoResponse,
     Json,
 };
 
 use super::{
     middleware::AdminState,
-    types::{AdminErrorResponse, SetDisabledRequest, SetPriorityRequest, SuccessResponse},
+    types::{SetDisabledRequest, SetPriorityRequest, SuccessResponse},
 };
 
 /// GET /api/admin/credentials
@@ -31,11 +30,7 @@ pub async fn set_credential_disabled(
             let action = if payload.disabled { "禁用" } else { "启用" };
             Json(SuccessResponse::new(format!("凭据 #{} 已{}", index, action))).into_response()
         }
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(AdminErrorResponse::invalid_request(e.to_string())),
-        )
-            .into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
 
@@ -52,11 +47,7 @@ pub async fn set_credential_priority(
             index, payload.priority
         )))
         .into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(AdminErrorResponse::invalid_request(e.to_string())),
-        )
-            .into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
 
@@ -72,11 +63,7 @@ pub async fn reset_failure_count(
             index
         )))
         .into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(AdminErrorResponse::invalid_request(e.to_string())),
-        )
-            .into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
 
@@ -88,10 +75,6 @@ pub async fn get_credential_balance(
 ) -> impl IntoResponse {
     match state.service.get_balance(index).await {
         Ok(response) => Json(response).into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(AdminErrorResponse::api_error(e.to_string())),
-        )
-            .into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
