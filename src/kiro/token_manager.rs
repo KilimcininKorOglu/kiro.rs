@@ -6,6 +6,7 @@
 use anyhow::bail;
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::Mutex;
+use tokio::sync::Mutex as TokioMutex;
 
 use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
@@ -382,6 +383,8 @@ pub struct MultiTokenManager {
     entries: Mutex<Vec<CredentialEntry>>,
     /// 当前活动凭据索引
     current_index: Mutex<usize>,
+    /// Token 刷新锁，确保同一时间只有一个刷新操作
+    refresh_lock: TokioMutex<()>,
 }
 
 /// 每个凭据最大 API 调用失败次数
@@ -431,6 +434,7 @@ impl MultiTokenManager {
             proxy,
             entries: Mutex::new(entries),
             current_index: Mutex::new(0),
+            refresh_lock: TokioMutex::new(()),
         })
     }
 
@@ -522,6 +526,8 @@ impl MultiTokenManager {
 
     /// 尝试使用指定凭据获取有效 Token
     ///
+    /// 使用双重检查锁定模式，确保同一时间只有一个刷新操作
+    ///
     /// # Arguments
     /// * `index` - 凭据索引，用于更新正确的条目
     /// * `credentials` - 凭据信息
@@ -530,19 +536,40 @@ impl MultiTokenManager {
         index: usize,
         credentials: &KiroCredentials,
     ) -> anyhow::Result<CallContext> {
-        let mut creds = credentials.clone();
+        // 第一次检查（无锁）：快速判断是否需要刷新
+        let needs_refresh = is_token_expired(credentials) || is_token_expiring_soon(credentials);
 
-        if is_token_expired(&creds) || is_token_expiring_soon(&creds) {
-            creds = refresh_token(&creds, &self.config, self.proxy.as_ref()).await?;
+        let creds = if needs_refresh {
+            // 获取刷新锁，确保同一时间只有一个刷新操作
+            let _guard = self.refresh_lock.lock().await;
 
-            if is_token_expired(&creds) {
-                anyhow::bail!("刷新后的 Token 仍然无效或已过期");
+            // 第二次检查：获取锁后重新读取凭据，因为其他请求可能已经完成刷新
+            let current_creds = {
+                let entries = self.entries.lock();
+                entries[index].credentials.clone()
+            };
+
+            if is_token_expired(&current_creds) || is_token_expiring_soon(&current_creds) {
+                // 确实需要刷新
+                let new_creds =
+                    refresh_token(&current_creds, &self.config, self.proxy.as_ref()).await?;
+
+                if is_token_expired(&new_creds) {
+                    anyhow::bail!("刷新后的 Token 仍然无效或已过期");
+                }
+
+                // 更新凭据
+                let mut entries = self.entries.lock();
+                entries[index].credentials = new_creds.clone();
+                new_creds
+            } else {
+                // 其他请求已经完成刷新，直接使用新凭据
+                tracing::debug!("Token 已被其他请求刷新，跳过刷新");
+                current_creds
             }
-
-            // 使用传入的 index 更新凭据，避免竞态条件
-            let mut entries = self.entries.lock();
-            entries[index].credentials = creds.clone();
-        }
+        } else {
+            credentials.clone()
+        };
 
         let token = creds
             .access_token
