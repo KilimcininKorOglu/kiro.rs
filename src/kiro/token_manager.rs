@@ -474,6 +474,7 @@ impl MultiTokenManager {
         // 计算当前最大 ID，为没有 ID 的凭据分配新 ID
         let max_existing_id = credentials.iter().filter_map(|c| c.id).max().unwrap_or(0);
         let mut next_id = max_existing_id + 1;
+        let mut has_new_ids = false;
 
         let entries: Vec<CredentialEntry> = credentials
             .into_iter()
@@ -482,6 +483,7 @@ impl MultiTokenManager {
                     let id = next_id;
                     next_id += 1;
                     cred.id = Some(id);
+                    has_new_ids = true;
                     id
                 });
                 CredentialEntry {
@@ -512,7 +514,7 @@ impl MultiTokenManager {
             .map(|e| e.id)
             .unwrap(); // 前面已检查 non-empty
 
-        Ok(Self {
+        let manager = Self {
             config,
             proxy,
             entries: Mutex::new(entries),
@@ -520,7 +522,18 @@ impl MultiTokenManager {
             refresh_lock: TokioMutex::new(()),
             credentials_path,
             is_multiple_format,
-        })
+        };
+
+        // 如果有新分配的 ID，立即持久化到配置文件
+        if has_new_ids {
+            if let Err(e) = manager.persist_credentials() {
+                tracing::warn!("新分配 ID 后持久化失败: {}", e);
+            } else {
+                tracing::info!("已为凭据分配新 ID 并写回配置文件");
+            }
+        }
+
+        Ok(manager)
     }
 
     /// 获取配置的引用
