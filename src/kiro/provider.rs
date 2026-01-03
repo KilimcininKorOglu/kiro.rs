@@ -200,8 +200,8 @@ impl KiroProvider {
                         max_retries,
                         e
                     );
-                    // 网络错误，报告失败并重试（使用绑定的 index）
-                    if !self.token_manager.report_failure(ctx.index) {
+                    // 网络错误，报告失败并重试（使用绑定的 id）
+                    if !self.token_manager.report_failure(ctx.id) {
                         return Err(e.into());
                     }
                     last_error = Some(e.into());
@@ -213,7 +213,7 @@ impl KiroProvider {
 
             // 成功响应
             if status.is_success() {
-                self.token_manager.report_success(ctx.index);
+                self.token_manager.report_success(ctx.id);
                 return Ok(response);
             }
 
@@ -224,7 +224,7 @@ impl KiroProvider {
                 anyhow::bail!("{} API 请求失败: {} {}", api_type, status, body);
             }
 
-            // 其他错误 - 记录失败并可能重试（使用绑定的 index）
+            // 其他错误 - 记录失败并可能重试（使用绑定的 id）
             let body = response.text().await.unwrap_or_default();
             tracing::warn!(
                 "API 请求失败（尝试 {}/{}）: {} {}",
@@ -234,7 +234,7 @@ impl KiroProvider {
                 body
             );
 
-            let has_available = self.token_manager.report_failure(ctx.index);
+            let has_available = self.token_manager.report_failure(ctx.id);
             if !has_available {
                 let api_type = if is_stream { "流式" } else { "非流式" };
                 anyhow::bail!(
@@ -302,7 +302,7 @@ mod tests {
 
         let provider = create_test_provider(config, credentials.clone());
         let ctx = CallContext {
-            index: 0,
+            id: 1,
             credentials,
             token: "test_token".to_string(),
         };

@@ -12,8 +12,8 @@ pub struct CredentialsStatusResponse {
     pub total: usize,
     /// 可用凭据数量（未禁用）
     pub available: usize,
-    /// 当前活跃凭据索引
-    pub current_index: usize,
+    /// 当前活跃凭据 ID
+    pub current_id: u64,
     /// 各凭据状态列表
     pub credentials: Vec<CredentialStatusItem>,
 }
@@ -22,8 +22,8 @@ pub struct CredentialsStatusResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialStatusItem {
-    /// 凭据索引（唯一标识符）
-    pub index: usize,
+    /// 凭据唯一 ID
+    pub id: u64,
     /// 优先级（数字越小优先级越高）
     pub priority: u32,
     /// 是否被禁用
@@ -64,8 +64,8 @@ pub struct SetPriorityRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BalanceResponse {
-    /// 凭据索引
-    pub index: usize,
+    /// 凭据 ID
+    pub id: u64,
     /// 订阅类型
     pub subscription_title: Option<String>,
     /// 当前使用量

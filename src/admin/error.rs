@@ -9,8 +9,8 @@ use super::types::AdminErrorResponse;
 /// Admin 服务错误类型
 #[derive(Debug)]
 pub enum AdminServiceError {
-    /// 凭据索引不存在
-    NotFound { index: usize, total: usize },
+    /// 凭据不存在
+    NotFound { id: u64 },
 
     /// 上游服务调用失败（网络、API 错误等）
     UpstreamError(String),
@@ -22,8 +22,8 @@ pub enum AdminServiceError {
 impl fmt::Display for AdminServiceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AdminServiceError::NotFound { index, total } => {
-                write!(f, "凭据索引超出范围: {} (总数: {})", index, total)
+            AdminServiceError::NotFound { id } => {
+                write!(f, "凭据不存在: {}", id)
             }
             AdminServiceError::UpstreamError(msg) => write!(f, "上游服务错误: {}", msg),
             AdminServiceError::InternalError(msg) => write!(f, "内部错误: {}", msg),

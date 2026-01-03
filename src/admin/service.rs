@@ -27,11 +27,11 @@ impl AdminService {
             .entries
             .into_iter()
             .map(|entry| CredentialStatusItem {
-                index: entry.index,
+                id: entry.id,
                 priority: entry.priority,
                 disabled: entry.disabled,
                 failure_count: entry.failure_count,
-                is_current: entry.index == snapshot.current_index,
+                is_current: entry.id == snapshot.current_id,
                 expires_at: entry.expires_at,
                 auth_method: entry.auth_method,
                 has_profile_arn: entry.has_profile_arn,
@@ -41,53 +41,49 @@ impl AdminService {
         CredentialsStatusResponse {
             total: snapshot.total,
             available: snapshot.available,
-            current_index: snapshot.current_index,
+            current_id: snapshot.current_id,
             credentials,
         }
     }
 
     /// 设置凭据禁用状态
-    pub fn set_disabled(&self, index: usize, disabled: bool) -> Result<(), AdminServiceError> {
-        // 先获取当前凭据索引，用于判断是否需要切换
+    pub fn set_disabled(&self, id: u64, disabled: bool) -> Result<(), AdminServiceError> {
+        // 先获取当前凭据 ID，用于判断是否需要切换
         let snapshot = self.token_manager.snapshot();
-        let current_index = snapshot.current_index;
-        let total = snapshot.total;
+        let current_id = snapshot.current_id;
 
         self.token_manager
-            .set_disabled(index, disabled)
-            .map_err(|e| self.classify_error(e, index, total))?;
+            .set_disabled(id, disabled)
+            .map_err(|e| self.classify_error(e, id))?;
 
         // 只有禁用的是当前凭据时才尝试切换到下一个
-        if disabled && index == current_index {
+        if disabled && id == current_id {
             let _ = self.token_manager.switch_to_next();
         }
         Ok(())
     }
 
     /// 设置凭据优先级
-    pub fn set_priority(&self, index: usize, priority: u32) -> Result<(), AdminServiceError> {
-        let total = self.token_manager.snapshot().total;
+    pub fn set_priority(&self, id: u64, priority: u32) -> Result<(), AdminServiceError> {
         self.token_manager
-            .set_priority(index, priority)
-            .map_err(|e| self.classify_error(e, index, total))
+            .set_priority(id, priority)
+            .map_err(|e| self.classify_error(e, id))
     }
 
     /// 重置失败计数并重新启用
-    pub fn reset_and_enable(&self, index: usize) -> Result<(), AdminServiceError> {
-        let total = self.token_manager.snapshot().total;
+    pub fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
-            .reset_and_enable(index)
-            .map_err(|e| self.classify_error(e, index, total))
+            .reset_and_enable(id)
+            .map_err(|e| self.classify_error(e, id))
     }
 
     /// 获取凭据余额
-    pub async fn get_balance(&self, index: usize) -> Result<BalanceResponse, AdminServiceError> {
-        let total = self.token_manager.snapshot().total;
+    pub async fn get_balance(&self, id: u64) -> Result<BalanceResponse, AdminServiceError> {
         let usage = self
             .token_manager
-            .get_usage_limits_for(index)
+            .get_usage_limits_for(id)
             .await
-            .map_err(|e| self.classify_balance_error(e, index, total))?;
+            .map_err(|e| self.classify_balance_error(e, id))?;
 
         let current_usage = usage.current_usage();
         let usage_limit = usage.usage_limit();
@@ -99,7 +95,7 @@ impl AdminService {
         };
 
         Ok(BalanceResponse {
-            index,
+            id,
             subscription_title: usage.subscription_title().map(|s| s.to_string()),
             current_usage,
             usage_limit,
@@ -113,12 +109,11 @@ impl AdminService {
     fn classify_error(
         &self,
         e: anyhow::Error,
-        index: usize,
-        total: usize,
+        id: u64,
     ) -> AdminServiceError {
         let msg = e.to_string();
-        if msg.contains("索引超出范围") {
-            AdminServiceError::NotFound { index, total }
+        if msg.contains("不存在") {
+            AdminServiceError::NotFound { id }
         } else {
             AdminServiceError::InternalError(msg)
         }
@@ -128,14 +123,13 @@ impl AdminService {
     fn classify_balance_error(
         &self,
         e: anyhow::Error,
-        index: usize,
-        total: usize,
+        id: u64,
     ) -> AdminServiceError {
         let msg = e.to_string();
 
-        // 1. 索引越界
-        if msg.contains("索引超出范围") {
-            return AdminServiceError::NotFound { index, total };
+        // 1. 凭据不存在
+        if msg.contains("不存在") {
+            return AdminServiceError::NotFound { id };
         }
 
         // 2. 上游服务错误特征：HTTP 响应错误或网络错误

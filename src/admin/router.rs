@@ -18,10 +18,10 @@ use super::{
 ///
 /// # 端点
 /// - `GET /credentials` - 获取所有凭据状态
-/// - `POST /credentials/:index/disabled` - 设置凭据禁用状态
-/// - `POST /credentials/:index/priority` - 设置凭据优先级
-/// - `POST /credentials/:index/reset` - 重置失败计数
-/// - `GET /credentials/:index/balance` - 获取凭据余额
+/// - `POST /credentials/:id/disabled` - 设置凭据禁用状态
+/// - `POST /credentials/:id/priority` - 设置凭据优先级
+/// - `POST /credentials/:id/reset` - 重置失败计数
+/// - `GET /credentials/:id/balance` - 获取凭据余额
 ///
 /// # 认证
 /// 需要 Admin API Key 认证，支持：
@@ -30,10 +30,10 @@ use super::{
 pub fn create_admin_router(state: AdminState) -> Router {
     Router::new()
         .route("/credentials", get(get_all_credentials))
-        .route("/credentials/{index}/disabled", post(set_credential_disabled))
-        .route("/credentials/{index}/priority", post(set_credential_priority))
-        .route("/credentials/{index}/reset", post(reset_failure_count))
-        .route("/credentials/{index}/balance", get(get_credential_balance))
+        .route("/credentials/{id}/disabled", post(set_credential_disabled))
+        .route("/credentials/{id}/priority", post(set_credential_priority))
+        .route("/credentials/{id}/reset", post(reset_failure_count))
+        .route("/credentials/{id}/balance", get(get_credential_balance))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             admin_auth_middleware,

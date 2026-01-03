@@ -11,6 +11,10 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroCredentials {
+    /// 凭据唯一标识符（自增 ID）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
+
     /// 访问令牌
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
@@ -173,6 +177,7 @@ mod tests {
     #[test]
     fn test_to_json() {
         let creds = KiroCredentials {
+            id: None,
             access_token: Some("token".to_string()),
             refresh_token: None,
             profile_arn: None,

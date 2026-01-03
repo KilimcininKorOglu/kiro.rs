@@ -18,62 +18,62 @@ pub async fn get_all_credentials(State(state): State<AdminState>) -> impl IntoRe
     Json(response)
 }
 
-/// POST /api/admin/credentials/:index/disabled
+/// POST /api/admin/credentials/:id/disabled
 /// 设置凭据禁用状态
 pub async fn set_credential_disabled(
     State(state): State<AdminState>,
-    Path(index): Path<usize>,
+    Path(id): Path<u64>,
     Json(payload): Json<SetDisabledRequest>,
 ) -> impl IntoResponse {
-    match state.service.set_disabled(index, payload.disabled) {
+    match state.service.set_disabled(id, payload.disabled) {
         Ok(_) => {
             let action = if payload.disabled { "禁用" } else { "启用" };
-            Json(SuccessResponse::new(format!("凭据 #{} 已{}", index, action))).into_response()
+            Json(SuccessResponse::new(format!("凭据 #{} 已{}", id, action))).into_response()
         }
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
 
-/// POST /api/admin/credentials/:index/priority
+/// POST /api/admin/credentials/:id/priority
 /// 设置凭据优先级
 pub async fn set_credential_priority(
     State(state): State<AdminState>,
-    Path(index): Path<usize>,
+    Path(id): Path<u64>,
     Json(payload): Json<SetPriorityRequest>,
 ) -> impl IntoResponse {
-    match state.service.set_priority(index, payload.priority) {
+    match state.service.set_priority(id, payload.priority) {
         Ok(_) => Json(SuccessResponse::new(format!(
             "凭据 #{} 优先级已设置为 {}",
-            index, payload.priority
+            id, payload.priority
         )))
         .into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
 
-/// POST /api/admin/credentials/:index/reset
+/// POST /api/admin/credentials/:id/reset
 /// 重置失败计数并重新启用
 pub async fn reset_failure_count(
     State(state): State<AdminState>,
-    Path(index): Path<usize>,
+    Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    match state.service.reset_and_enable(index) {
+    match state.service.reset_and_enable(id) {
         Ok(_) => Json(SuccessResponse::new(format!(
             "凭据 #{} 失败计数已重置并重新启用",
-            index
+            id
         )))
         .into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
 
-/// GET /api/admin/credentials/:index/balance
+/// GET /api/admin/credentials/:id/balance
 /// 获取指定凭据的余额
 pub async fn get_credential_balance(
     State(state): State<AdminState>,
-    Path(index): Path<usize>,
+    Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    match state.service.get_balance(index).await {
+    match state.service.get_balance(id).await {
         Ok(response) => Json(response).into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
