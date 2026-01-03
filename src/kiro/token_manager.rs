@@ -10,7 +10,6 @@ use serde::Serialize;
 use tokio::sync::Mutex as TokioMutex;
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
 
 use crate::http_client::{build_client, ProxyConfig};
 use crate::kiro::machine_id;
@@ -427,8 +426,6 @@ pub struct MultiTokenManager {
     entries: Mutex<Vec<CredentialEntry>>,
     /// 当前活动凭据 ID
     current_id: Mutex<u64>,
-    /// 下一个可用的凭据 ID
-    next_id: AtomicU64,
     /// Token 刷新锁，确保同一时间只有一个刷新操作
     refresh_lock: TokioMutex<()>,
     /// 凭据文件路径（用于回写）
@@ -496,6 +493,18 @@ impl MultiTokenManager {
             })
             .collect();
 
+        // 检测重复 ID
+        let mut seen_ids = std::collections::HashSet::new();
+        let mut duplicate_ids = Vec::new();
+        for entry in &entries {
+            if !seen_ids.insert(entry.id) {
+                duplicate_ids.push(entry.id);
+            }
+        }
+        if !duplicate_ids.is_empty() {
+            anyhow::bail!("检测到重复的凭据 ID: {:?}", duplicate_ids);
+        }
+
         // 选择初始凭据：优先级最高（priority 最小）的凭据
         let initial_id = entries
             .iter()
@@ -508,7 +517,6 @@ impl MultiTokenManager {
             proxy,
             entries: Mutex::new(entries),
             current_id: Mutex::new(initial_id),
-            next_id: AtomicU64::new(next_id),
             refresh_lock: TokioMutex::new(()),
             credentials_path,
             is_multiple_format,
@@ -1085,6 +1093,20 @@ mod tests {
         let config = Config::default();
         let result = MultiTokenManager::new(config, vec![], None, None, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multi_token_manager_duplicate_ids() {
+        let config = Config::default();
+        let mut cred1 = KiroCredentials::default();
+        cred1.id = Some(1);
+        let mut cred2 = KiroCredentials::default();
+        cred2.id = Some(1); // 重复 ID
+
+        let result = MultiTokenManager::new(config, vec![cred1, cred2], None, None, false);
+        assert!(result.is_err());
+        let err_msg = result.err().unwrap().to_string();
+        assert!(err_msg.contains("重复的凭据 ID"), "错误消息应包含 '重复的凭据 ID'，实际: {}", err_msg);
     }
 
     #[test]
