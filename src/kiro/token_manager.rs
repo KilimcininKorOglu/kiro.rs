@@ -615,8 +615,10 @@ impl MultiTokenManager {
                     entries[index].credentials = new_creds.clone();
                 }
 
-                // 回写凭据到文件（仅多凭据格式）
-                self.persist_credentials();
+                // 回写凭据到文件（仅多凭据格式），失败只记录警告
+                if let Err(e) = self.persist_credentials() {
+                    tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
+                }
 
                 new_creds
             } else {
@@ -645,15 +647,22 @@ impl MultiTokenManager {
     /// 仅在以下条件满足时回写：
     /// - 源文件是多凭据格式（数组）
     /// - credentials_path 已设置
-    fn persist_credentials(&self) {
+    ///
+    /// # Returns
+    /// - `Ok(true)` - 成功写入文件
+    /// - `Ok(false)` - 跳过写入（非多凭据格式或无路径配置）
+    /// - `Err(_)` - 写入失败
+    fn persist_credentials(&self) -> anyhow::Result<bool> {
+        use anyhow::Context;
+
         // 仅多凭据格式才回写
         if !self.is_multiple_format {
-            return;
+            return Ok(false);
         }
 
         let path = match &self.credentials_path {
             Some(p) => p,
-            None => return,
+            None => return Ok(false),
         };
 
         // 收集所有凭据
@@ -663,20 +672,15 @@ impl MultiTokenManager {
         };
 
         // 序列化为 pretty JSON
-        let json = match serde_json::to_string_pretty(&credentials) {
-            Ok(j) => j,
-            Err(e) => {
-                tracing::error!("序列化凭据失败: {}", e);
-                return;
-            }
-        };
+        let json =
+            serde_json::to_string_pretty(&credentials).context("序列化凭据失败")?;
 
         // 写入文件
-        if let Err(e) = std::fs::write(path, json) {
-            tracing::error!("回写凭据文件失败: {}", e);
-        } else {
-            tracing::debug!("已回写凭据到文件: {:?}", path);
-        }
+        std::fs::write(path, &json)
+            .with_context(|| format!("回写凭据文件失败: {:?}", path))?;
+
+        tracing::debug!("已回写凭据到文件: {:?}", path);
+        Ok(true)
     }
 
     /// 报告指定凭据 API 调用成功
@@ -828,7 +832,7 @@ impl MultiTokenManager {
             }
         }
         // 持久化更改
-        self.persist_credentials();
+        self.persist_credentials()?;
         Ok(())
     }
 
@@ -842,7 +846,7 @@ impl MultiTokenManager {
             entries[index].credentials.priority = priority;
         }
         // 持久化更改
-        self.persist_credentials();
+        self.persist_credentials()?;
         Ok(())
     }
 
@@ -857,7 +861,7 @@ impl MultiTokenManager {
             entries[index].disabled = false;
         }
         // 持久化更改
-        self.persist_credentials();
+        self.persist_credentials()?;
         Ok(())
     }
 
@@ -888,7 +892,10 @@ impl MultiTokenManager {
                     let mut entries = self.entries.lock();
                     entries[index].credentials = new_creds.clone();
                 }
-                self.persist_credentials();
+                // 持久化失败只记录警告，不影响本次请求
+                if let Err(e) = self.persist_credentials() {
+                    tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
+                }
                 new_creds
                     .access_token
                     .ok_or_else(|| anyhow::anyhow!("刷新后无 access_token"))?
