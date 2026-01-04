@@ -786,9 +786,14 @@ impl MultiTokenManager {
         let json =
             serde_json::to_string_pretty(&credentials).context("序列化凭据失败")?;
 
-        // 写入文件
-        std::fs::write(path, &json)
-            .with_context(|| format!("回写凭据文件失败: {:?}", path))?;
+        // 写入文件（在 Tokio runtime 内使用 block_in_place 避免阻塞 worker）
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::block_in_place(|| std::fs::write(path, &json))
+                .with_context(|| format!("回写凭据文件失败: {:?}", path))?;
+        } else {
+            std::fs::write(path, &json)
+                .with_context(|| format!("回写凭据文件失败: {:?}", path))?;
+        }
 
         tracing::debug!("已回写凭据到文件: {:?}", path);
         Ok(true)
