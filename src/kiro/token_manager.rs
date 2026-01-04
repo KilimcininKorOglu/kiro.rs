@@ -654,6 +654,32 @@ impl MultiTokenManager {
         }
     }
 
+    /// 选择优先级最高的未禁用凭据作为当前凭据（内部方法）
+    ///
+    /// 与 `switch_to_next_by_priority` 不同，此方法不排除当前凭据，
+    /// 纯粹按优先级选择，用于优先级变更后立即生效
+    fn select_highest_priority(&self) {
+        let entries = self.entries.lock();
+        let mut current_id = self.current_id.lock();
+
+        // 选择优先级最高的未禁用凭据（不排除当前凭据）
+        if let Some(best) = entries
+            .iter()
+            .filter(|e| !e.disabled)
+            .min_by_key(|e| e.credentials.priority)
+        {
+            if best.id != *current_id {
+                tracing::info!(
+                    "优先级变更后切换凭据: #{} -> #{}（优先级 {}）",
+                    *current_id,
+                    best.id,
+                    best.credentials.priority
+                );
+                *current_id = best.id;
+            }
+        }
+    }
+
     /// 尝试使用指定凭据获取有效 Token
     ///
     /// 使用双重检查锁定模式，确保同一时间只有一个刷新操作
@@ -919,6 +945,9 @@ impl MultiTokenManager {
     }
 
     /// 设置凭据优先级（Admin API）
+    ///
+    /// 修改优先级后会立即按新优先级重新选择当前凭据。
+    /// 即使持久化失败，内存中的优先级和当前凭据选择也会生效。
     pub fn set_priority(&self, id: u64, priority: u32) -> anyhow::Result<()> {
         {
             let mut entries = self.entries.lock();
@@ -928,6 +957,8 @@ impl MultiTokenManager {
                 .ok_or_else(|| anyhow::anyhow!("凭据不存在: {}", id))?;
             entry.credentials.priority = priority;
         }
+        // 立即按新优先级重新选择当前凭据（无论持久化是否成功）
+        self.select_highest_priority();
         // 持久化更改
         self.persist_credentials()?;
         Ok(())
