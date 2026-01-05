@@ -467,10 +467,6 @@ impl MultiTokenManager {
         credentials_path: Option<PathBuf>,
         is_multiple_format: bool,
     ) -> anyhow::Result<Self> {
-        if credentials.is_empty() {
-            anyhow::bail!("至少需要一个凭据");
-        }
-
         // 计算当前最大 ID，为没有 ID 的凭据分配新 ID
         let max_existing_id = credentials.iter().filter_map(|c| c.id).max().unwrap_or(0);
         let mut next_id = max_existing_id + 1;
@@ -507,12 +503,12 @@ impl MultiTokenManager {
             anyhow::bail!("检测到重复的凭据 ID: {:?}", duplicate_ids);
         }
 
-        // 选择初始凭据：优先级最高（priority 最小）的凭据
+        // 选择初始凭据：优先级最高（priority 最小）的凭据，无凭据时为 0
         let initial_id = entries
             .iter()
             .min_by_key(|e| e.credentials.priority)
             .map(|e| e.id)
-            .unwrap(); // 前面已检查 non-empty
+            .unwrap_or(0);
 
         let manager = Self {
             config,
@@ -1191,7 +1187,11 @@ mod tests {
     fn test_multi_token_manager_empty_credentials() {
         let config = Config::default();
         let result = MultiTokenManager::new(config, vec![], None, None, false);
-        assert!(result.is_err());
+        // 支持 0 个凭据启动（可通过管理面板添加）
+        assert!(result.is_ok());
+        let manager = result.unwrap();
+        assert_eq!(manager.total_count(), 0);
+        assert_eq!(manager.available_count(), 0);
     }
 
     #[test]
