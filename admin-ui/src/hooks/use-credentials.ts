@@ -5,7 +5,9 @@ import {
   setCredentialPriority,
   resetCredentialFailure,
   getCredentialBalance,
+  addCredential,
 } from '@/api/credentials'
+import type { AddCredentialRequest } from '@/types/api'
 
 // 查询凭据列表
 export function useCredentials() {
@@ -54,6 +56,17 @@ export function useResetFailure() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => resetCredentialFailure(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['credentials'] })
+    },
+  })
+}
+
+// 添加新凭据
+export function useAddCredential() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (req: AddCredentialRequest) => addCredential(req),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
     },

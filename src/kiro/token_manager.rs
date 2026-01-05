@@ -1048,6 +1048,63 @@ impl MultiTokenManager {
 
         get_usage_limits(&credentials, &self.config, &token, self.proxy.as_ref()).await
     }
+
+    /// 添加新凭据（Admin API）
+    ///
+    /// # 流程
+    /// 1. 验证凭据基本字段（refresh_token 不为空）
+    /// 2. 尝试刷新 Token 验证凭据有效性
+    /// 3. 分配新 ID（当前最大 ID + 1）
+    /// 4. 添加到 entries 列表
+    /// 5. 持久化到配置文件
+    ///
+    /// # 返回
+    /// - `Ok(u64)` - 新凭据 ID
+    /// - `Err(_)` - 验证失败或添加失败
+    pub async fn add_credential(&self, new_cred: KiroCredentials) -> anyhow::Result<u64> {
+        // 1. 基本验证
+        validate_refresh_token(&new_cred)?;
+
+        // 2. 尝试刷新 Token 验证凭据有效性
+        let mut validated_cred =
+            refresh_token(&new_cred, &self.config, self.proxy.as_ref()).await?;
+
+        // 3. 分配新 ID
+        let new_id = {
+            let entries = self.entries.lock();
+            entries.iter().map(|e| e.id).max().unwrap_or(0) + 1
+        };
+
+        // 4. 设置 ID 并添加到列表
+        validated_cred.id = Some(new_id);
+        // 保留原始的优先级、auth_method 等字段
+        validated_cred.priority = new_cred.priority;
+        if validated_cred.auth_method.is_none() {
+            validated_cred.auth_method = new_cred.auth_method;
+        }
+        if validated_cred.client_id.is_none() {
+            validated_cred.client_id = new_cred.client_id;
+        }
+        if validated_cred.client_secret.is_none() {
+            validated_cred.client_secret = new_cred.client_secret;
+        }
+
+        {
+            let mut entries = self.entries.lock();
+            entries.push(CredentialEntry {
+                id: new_id,
+                credentials: validated_cred,
+                failure_count: 0,
+                disabled: false,
+            });
+        }
+
+        // 5. 持久化
+        self.persist_credentials()?;
+
+        tracing::info!("成功添加凭据 #{}", new_id);
+        Ok(new_id)
+    }
 }
 
 #[cfg(test)]

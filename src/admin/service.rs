@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
+use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::MultiTokenManager;
 
 use super::error::AdminServiceError;
-use super::types::{BalanceResponse, CredentialStatusItem, CredentialsStatusResponse};
+use super::types::{AddCredentialRequest, AddCredentialResponse, BalanceResponse, CredentialStatusItem, CredentialsStatusResponse};
 
 /// Admin 服务
 ///
@@ -105,6 +106,38 @@ impl AdminService {
         })
     }
 
+    /// 添加新凭据
+    pub async fn add_credential(
+        &self,
+        req: AddCredentialRequest,
+    ) -> Result<AddCredentialResponse, AdminServiceError> {
+        // 构建凭据对象
+        let new_cred = KiroCredentials {
+            id: None,
+            access_token: None,
+            refresh_token: Some(req.refresh_token),
+            profile_arn: None,
+            expires_at: None,
+            auth_method: Some(req.auth_method),
+            client_id: req.client_id,
+            client_secret: req.client_secret,
+            priority: req.priority,
+        };
+
+        // 调用 token_manager 添加凭据
+        let credential_id = self
+            .token_manager
+            .add_credential(new_cred)
+            .await
+            .map_err(|e| self.classify_add_error(e))?;
+
+        Ok(AddCredentialResponse {
+            success: true,
+            message: format!("凭据添加成功，ID: {}", credential_id),
+            credential_id,
+        })
+    }
+
     /// 分类简单操作错误（set_disabled, set_priority, reset_and_enable）
     fn classify_error(
         &self,
@@ -152,6 +185,28 @@ impl AdminService {
         } else {
             // 3. 默认归类为内部错误（本地验证失败、配置错误等）
             // 包括：缺少 refreshToken、refreshToken 已被截断、无法生成 machineId 等
+            AdminServiceError::InternalError(msg)
+        }
+    }
+
+    /// 分类添加凭据错误
+    fn classify_add_error(&self, e: anyhow::Error) -> AdminServiceError {
+        let msg = e.to_string();
+
+        // 凭据验证失败（refreshToken 无效、格式错误等）
+        let is_invalid_credential = msg.contains("refreshToken")
+            || msg.contains("凭证已过期或无效")
+            || msg.contains("权限不足")
+            || msg.contains("已被限流");
+
+        if is_invalid_credential {
+            AdminServiceError::InvalidCredential(msg)
+        } else if msg.contains("error trying to connect")
+            || msg.contains("connection")
+            || msg.contains("timeout")
+        {
+            AdminServiceError::UpstreamError(msg)
+        } else {
             AdminServiceError::InternalError(msg)
         }
     }
