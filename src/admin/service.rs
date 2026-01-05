@@ -24,7 +24,7 @@ impl AdminService {
     pub fn get_all_credentials(&self) -> CredentialsStatusResponse {
         let snapshot = self.token_manager.snapshot();
 
-        let credentials: Vec<CredentialStatusItem> = snapshot
+        let mut credentials: Vec<CredentialStatusItem> = snapshot
             .entries
             .into_iter()
             .map(|entry| CredentialStatusItem {
@@ -38,6 +38,9 @@ impl AdminService {
                 has_profile_arn: entry.has_profile_arn,
             })
             .collect();
+
+        // 按优先级排序（数字越小优先级越高）
+        credentials.sort_by_key(|c| c.priority);
 
         CredentialsStatusResponse {
             total: snapshot.total,
