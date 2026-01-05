@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAddCredential } from '@/hooks/use-credentials'
+import { extractErrorMessage } from '@/lib/utils'
 
 interface AddCredentialDialogProps {
   open: boolean
@@ -66,9 +67,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
           resetForm()
         },
         onError: (error: unknown) => {
-          const axiosError = error as { response?: { data?: { error?: { message?: string } } }; message?: string }
-          const message = axiosError.response?.data?.error?.message || axiosError.message || '未知错误'
-          toast.error(`添加失败: ${message}`)
+          toast.error(`添加失败: ${extractErrorMessage(error)}`)
         },
       }
     )

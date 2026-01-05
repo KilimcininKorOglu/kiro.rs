@@ -194,7 +194,9 @@ impl AdminService {
         let msg = e.to_string();
 
         // 凭据验证失败（refreshToken 无效、格式错误等）
-        let is_invalid_credential = msg.contains("refreshToken")
+        let is_invalid_credential = msg.contains("缺少 refreshToken")
+            || msg.contains("refreshToken 为空")
+            || msg.contains("refreshToken 已被截断")
             || msg.contains("凭证已过期或无效")
             || msg.contains("权限不足")
             || msg.contains("已被限流");

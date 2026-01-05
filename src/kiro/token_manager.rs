@@ -1075,19 +1075,12 @@ impl MultiTokenManager {
             entries.iter().map(|e| e.id).max().unwrap_or(0) + 1
         };
 
-        // 4. 设置 ID 并添加到列表
+        // 4. 设置 ID 并保留用户输入的元数据
         validated_cred.id = Some(new_id);
-        // 保留原始的优先级、auth_method 等字段
         validated_cred.priority = new_cred.priority;
-        if validated_cred.auth_method.is_none() {
-            validated_cred.auth_method = new_cred.auth_method;
-        }
-        if validated_cred.client_id.is_none() {
-            validated_cred.client_id = new_cred.client_id;
-        }
-        if validated_cred.client_secret.is_none() {
-            validated_cred.client_secret = new_cred.client_secret;
-        }
+        validated_cred.auth_method = new_cred.auth_method;
+        validated_cred.client_id = new_cred.client_id;
+        validated_cred.client_secret = new_cred.client_secret;
 
         {
             let mut entries = self.entries.lock();
