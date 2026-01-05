@@ -1,4 +1,5 @@
 mod admin;
+mod admin_ui;
 mod anthropic;
 mod common;
 mod http_client;
@@ -119,8 +120,14 @@ async fn main() {
             let admin_state = admin::AdminState::new(admin_key, admin_service);
             let admin_app = admin::create_admin_router(admin_state);
 
+            // 创建 Admin UI 路由
+            let admin_ui_app = admin_ui::create_admin_ui_router();
+
             tracing::info!("Admin API 已启用");
-            anthropic_app.nest("/api/admin", admin_app)
+            tracing::info!("Admin UI 已启用: /admin");
+            anthropic_app
+                .nest("/api/admin", admin_app)
+                .nest("/admin", admin_ui_app)
         }
     } else {
         anthropic_app
@@ -141,6 +148,8 @@ async fn main() {
         tracing::info!("  POST /api/admin/credentials/:index/priority");
         tracing::info!("  POST /api/admin/credentials/:index/reset");
         tracing::info!("  GET  /api/admin/credentials/:index/balance");
+        tracing::info!("Admin UI:");
+        tracing::info!("  GET  /admin");
     }
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
