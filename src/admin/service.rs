@@ -170,6 +170,7 @@ impl AdminService {
 
         Ok(BalanceResponse {
             id,
+            email: usage.email().map(|s| s.to_string()),
             subscription_title: usage.subscription_title().map(|s| s.to_string()),
             current_usage,
             usage_limit,

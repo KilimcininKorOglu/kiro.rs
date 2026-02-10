@@ -130,6 +130,8 @@ pub struct AddCredentialResponse {
 pub struct BalanceResponse {
     /// Credential ID
     pub id: u64,
+    /// User email
+    pub email: Option<String>,
     /// Subscription type
     pub subscription_title: Option<String>,
     /// Current usage

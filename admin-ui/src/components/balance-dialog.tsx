@@ -31,7 +31,7 @@ export function BalanceDialog({ credentialId, open, onOpenChange }: BalanceDialo
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            Credential #{credentialId} Balance Info
+            {balance?.email || `Credential #${credentialId}`} Balance Info
           </DialogTitle>
         </DialogHeader>
 

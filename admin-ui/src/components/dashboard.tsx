@@ -632,6 +632,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
                 #{data?.currentId || '-'}
                 <Badge variant="success">Active</Badge>
               </div>
+              {data?.credentials.find(c => c.id === data.currentId)?.email && (
+                <div className="text-sm text-muted-foreground mt-1">
+                  {data.credentials.find(c => c.id === data.currentId)?.email}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
