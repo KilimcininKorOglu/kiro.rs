@@ -71,6 +71,21 @@ pub struct KiroCredentials {
     /// User email (obtained from Anthropic API)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+
+    /// Subscription title (KIRO PRO+ / KIRO FREE etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subscription_title: Option<String>,
+}
+
+impl KiroCredentials {
+    /// Check if this credential supports Opus model
+    /// Returns false if subscription contains "FREE", otherwise true
+    pub fn supports_opus(&self) -> bool {
+        match &self.subscription_title {
+            Some(title) => !title.to_uppercase().contains("FREE"),
+            None => true, // Assume supports if unknown
+        }
+    }
 }
 
 /// Check if value is zero (for skipping serialization)
@@ -272,6 +287,7 @@ mod tests {
             api_region: None,
             machine_id: None,
             email: None,
+            subscription_title: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -385,6 +401,7 @@ mod tests {
             api_region: None,
             machine_id: None,
             email: None,
+            subscription_title: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -410,6 +427,7 @@ mod tests {
             api_region: None,
             machine_id: None,
             email: None,
+            subscription_title: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -517,6 +535,7 @@ mod tests {
             api_region: None,
             machine_id: Some("c".repeat(64)),
             email: None,
+            subscription_title: None,
         };
 
         let json = original.to_pretty_json().unwrap();

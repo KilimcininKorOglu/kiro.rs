@@ -646,16 +646,35 @@ impl MultiTokenManager {
     ///
     /// - priority mode: Select highest priority (lowest priority number) available credential
     /// - balanced mode: Round-robin select available credentials
-    fn select_next_credential(&self) -> Option<(u64, KiroCredentials)> {
+    /// - If model contains "opus", filter out FREE tier accounts in balanced mode
+    fn select_next_credential(&self, model: Option<&str>) -> Option<(u64, KiroCredentials)> {
         let entries = self.entries.lock();
-        let available: Vec<_> = entries.iter().filter(|e| !e.disabled).collect();
+        let mode = self.load_balancing_mode.lock().clone();
+        let mode = mode.as_str();
+
+        // Check if requesting Opus model
+        let is_opus = model
+            .map(|m| m.to_lowercase().contains("opus"))
+            .unwrap_or(false);
+
+        // Filter available credentials
+        let available: Vec<_> = entries
+            .iter()
+            .filter(|e| {
+                if e.disabled {
+                    return false;
+                }
+                // In balanced mode, filter out FREE accounts for Opus requests
+                if mode == "balanced" && is_opus && !e.credentials.supports_opus() {
+                    return false;
+                }
+                true
+            })
+            .collect();
 
         if available.is_empty() {
             return None;
         }
-
-        let mode = self.load_balancing_mode.lock().clone();
-        let mode = mode.as_str();
 
         match mode {
             "balanced" => {
@@ -682,7 +701,9 @@ impl MultiTokenManager {
     ///
     /// Automatically refreshes if Token is expired or about to expire
     /// On Token refresh failure, tries next available credential (not counted as failure)
-    pub async fn acquire_context(&self) -> anyhow::Result<CallContext> {
+    ///
+    /// If model is provided and contains "opus", FREE tier accounts will be filtered out in balanced mode
+    pub async fn acquire_context(&self, model: Option<&str>) -> anyhow::Result<CallContext> {
         let total = self.total_count();
         let mut tried_count = 0;
 
@@ -715,7 +736,7 @@ impl MultiTokenManager {
                     hit
                 } else {
                     // Current credential unavailable or balanced mode, select based on load balancing strategy
-                    let mut best = self.select_next_credential();
+                    let mut best = self.select_next_credential(model);
 
                     // No available credentials: if "all disabled due to auto-disable", do self-healing similar to restart
                     if best.is_none() {
@@ -734,7 +755,7 @@ impl MultiTokenManager {
                                 }
                             }
                             drop(entries);
-                            best = self.select_next_credential();
+                            best = self.select_next_credential(model);
                         }
                     }
 
@@ -1194,7 +1215,7 @@ impl MultiTokenManager {
 
     /// Get usage limits information
     pub async fn get_usage_limits(&self) -> anyhow::Result<UsageLimitsResponse> {
-        let ctx = self.acquire_context().await?;
+        let ctx = self.acquire_context(None).await?;
         get_usage_limits(
             &ctx.credentials,
             &self.config,
@@ -1363,7 +1384,24 @@ impl MultiTokenManager {
                 .ok_or_else(|| anyhow::anyhow!("Credential does not exist: {}", id))?
         };
 
-        get_usage_limits(&credentials, &self.config, &token, self.proxy.as_ref()).await
+        let usage = get_usage_limits(&credentials, &self.config, &token, self.proxy.as_ref()).await?;
+
+        // Update subscription_title in credential if available
+        if let Some(title) = usage.subscription_title() {
+            let mut entries = self.entries.lock();
+            if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+                if entry.credentials.subscription_title.as_deref() != Some(title) {
+                    entry.credentials.subscription_title = Some(title.to_string());
+                    drop(entries);
+                    // Persist to config file
+                    if let Err(e) = self.persist_credentials() {
+                        tracing::warn!("Failed to persist subscription_title: {}", e);
+                    }
+                }
+            }
+        }
+
+        Ok(usage)
     }
 
     /// Add new credential (Admin API)
@@ -1848,7 +1886,7 @@ mod tests {
         assert_eq!(manager.available_count(), 0);
 
         // Should trigger self-healing: reset failure counts and re-enable, avoiding need to restart process
-        let ctx = manager.acquire_context().await.unwrap();
+        let ctx = manager.acquire_context(None).await.unwrap();
         assert!(ctx.token == "t1" || ctx.token == "t2");
         assert_eq!(manager.available_count(), 2);
     }
@@ -1885,7 +1923,7 @@ mod tests {
         manager.report_quota_exhausted(2);
         assert_eq!(manager.available_count(), 0);
 
-        let err = manager.acquire_context().await.err().unwrap().to_string();
+        let err = manager.acquire_context(None).await.err().unwrap().to_string();
         assert!(
             err.contains("All credentials are disabled"),
             "Error should indicate all credentials disabled, actual: {}",

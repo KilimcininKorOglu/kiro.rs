@@ -201,6 +201,7 @@ impl AdminService {
             api_region: req.api_region,
             machine_id: req.machine_id,
             email: req.email,
+            subscription_title: None,
         };
 
         // Call token_manager to add credential

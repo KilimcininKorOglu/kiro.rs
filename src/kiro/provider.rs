@@ -22,6 +22,19 @@ const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
 /// Hard limit on total retries (to prevent infinite retries)
 const MAX_TOTAL_RETRIES: usize = 9;
 
+/// Extract model name from Kiro API request body
+///
+/// Looks for model ID in conversationState.currentMessage.userInputMessage.modelId
+fn extract_model_from_request(request_body: &str) -> Option<String> {
+    let json: serde_json::Value = serde_json::from_str(request_body).ok()?;
+    json.get("conversationState")?
+        .get("currentMessage")?
+        .get("userInputMessage")?
+        .get("modelId")?
+        .as_str()
+        .map(|s| s.to_string())
+}
+
 /// Kiro API Provider
 ///
 /// Core component responsible for communicating with the Kiro API
@@ -252,8 +265,8 @@ impl KiroProvider {
         let mut last_error: Option<anyhow::Error> = None;
 
         for attempt in 0..max_retries {
-            // Get call context
-            let ctx = match self.token_manager.acquire_context().await {
+            // Get call context (MCP doesn't need model filtering)
+            let ctx = match self.token_manager.acquire_context(None).await {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
@@ -380,9 +393,12 @@ impl KiroProvider {
         let mut last_error: Option<anyhow::Error> = None;
         let api_type = if is_stream { "streaming" } else { "non-streaming" };
 
+        // Extract model from request for credential filtering
+        let model = extract_model_from_request(request_body);
+
         for attempt in 0..max_retries {
             // Get call context (binds index, credentials, token)
-            let ctx = match self.token_manager.acquire_context().await {
+            let ctx = match self.token_manager.acquire_context(model.as_deref()).await {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
