@@ -1,24 +1,24 @@
-//! AWS Event Stream 流式解码器
+//! AWS Event Stream streaming decoder
 //!
-//! 使用状态机处理流式数据，支持断点续传和容错处理
+//! Uses state machine to process streaming data, supports resumption and fault tolerance
 //!
-//! ## 状态机设计
+//! ## State Machine Design
 //!
-//! 参考 kiro-kt 项目的状态机设计，采用四态模型：
+//! Based on kiro-kt project's state machine design, using a four-state model:
 //!
 //! ```text
 //! ┌─────────────────┐
-//! │      Ready      │  (初始态，就绪接收数据)
+//! │      Ready      │  (Initial state, ready to receive data)
 //! └────────┬────────┘
-//!          │ feed() 提供数据
+//!          │ feed() provides data
 //!          ↓
 //! ┌─────────────────┐
-//! │     Parsing     │  decode() 尝试解析
+//! │     Parsing     │  decode() attempts to parse
 //! └────────┬────────┘
 //!          │
 //!     ┌────┴────────────┐
 //!     ↓                 ↓
-//!  [成功]            [失败]
+//!  [Success]         [Failure]
 //!     │                 │
 //!     ↓                 ├─> error_count++
 //! ┌─────────┐           │
@@ -26,7 +26,7 @@
 //! └─────────┘           │    YES → Recovering → Ready
 //!                       │    NO  ↓
 //!                  ┌────────────┐
-//!                  │   Stopped  │ (终止态)
+//!                  │   Stopped  │ (Terminal state)
 //!                  └────────────┘
 //! ```
 
@@ -34,37 +34,37 @@ use super::error::{ParseError, ParseResult};
 use super::frame::{Frame, PRELUDE_SIZE, parse_frame};
 use bytes::{Buf, BytesMut};
 
-/// 默认最大缓冲区大小 (16 MB)
+/// Default maximum buffer size (16 MB)
 pub const DEFAULT_MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
-/// 默认最大连续错误数
+/// Default maximum consecutive errors
 pub const DEFAULT_MAX_ERRORS: usize = 5;
 
-/// 默认初始缓冲区容量
+/// Default initial buffer capacity
 pub const DEFAULT_BUFFER_CAPACITY: usize = 8192;
 
-/// 解码器状态
+/// Decoder state
 ///
-/// 采用四态模型，参考 kiro-kt 的设计：
-/// - Ready: 就绪状态，可以接收数据
-/// - Parsing: 正在解析帧
-/// - Recovering: 恢复中（尝试跳过损坏数据）
-/// - Stopped: 已停止（错误过多，终止态）
+/// Four-state model based on kiro-kt design:
+/// - Ready: Ready state, can receive data
+/// - Parsing: Currently parsing frame
+/// - Recovering: Recovering (attempting to skip corrupted data)
+/// - Stopped: Stopped (too many errors, terminal state)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecoderState {
-    /// 就绪，可以接收数据
+    /// Ready, can receive data
     Ready,
-    /// 正在解析帧
+    /// Currently parsing frame
     Parsing,
-    /// 恢复中（跳过损坏数据）
+    /// Recovering (skipping corrupted data)
     Recovering,
-    /// 已停止（错误过多）
+    /// Stopped (too many errors)
     Stopped,
 }
 
-/// 流式事件解码器
+/// Streaming event decoder
 ///
-/// 用于从字节流中解析 AWS Event Stream 消息帧
+/// Used to parse AWS Event Stream message frames from byte stream
 ///
 /// # Example
 ///
@@ -73,10 +73,10 @@ pub enum DecoderState {
 ///
 /// let mut decoder = EventStreamDecoder::new();
 ///
-/// // 提供流数据
+/// // Provide stream data
 /// decoder.feed(chunk)?;
 ///
-/// // 解码所有可用帧
+/// // Decode all available frames
 /// for result in decoder.decode_iter() {
 ///     match result {
 ///         Ok(frame) => println!("Got frame: {:?}", frame.event_type()),
@@ -85,19 +85,19 @@ pub enum DecoderState {
 /// }
 /// ```
 pub struct EventStreamDecoder {
-    /// 内部缓冲区
+    /// Internal buffer
     buffer: BytesMut,
-    /// 当前状态
+    /// Current state
     state: DecoderState,
-    /// 已处理的帧数量
+    /// Number of frames decoded
     frames_decoded: usize,
-    /// 连续错误计数
+    /// Consecutive error count
     error_count: usize,
-    /// 最大连续错误数
+    /// Maximum consecutive errors
     max_errors: usize,
-    /// 最大缓冲区大小
+    /// Maximum buffer size
     max_buffer_size: usize,
-    /// 跳过的字节数（用于调试）
+    /// Bytes skipped (for debugging)
     bytes_skipped: usize,
 }
 
@@ -108,12 +108,12 @@ impl Default for EventStreamDecoder {
 }
 
 impl EventStreamDecoder {
-    /// 创建新的解码器
+    /// Create new decoder
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_BUFFER_CAPACITY)
     }
 
-    /// 创建具有指定缓冲区大小的解码器
+    /// Create decoder with specified buffer size
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             buffer: BytesMut::with_capacity(capacity),
@@ -126,7 +126,7 @@ impl EventStreamDecoder {
         }
     }
 
-    /// 创建具有自定义配置的解码器
+    /// Create decoder with custom configuration
     pub fn with_config(capacity: usize, max_errors: usize, max_buffer_size: usize) -> Self {
         Self {
             buffer: BytesMut::with_capacity(capacity),
@@ -139,13 +139,13 @@ impl EventStreamDecoder {
         }
     }
 
-    /// 向解码器提供数据
+    /// Feed data to decoder
     ///
     /// # Returns
-    /// - `Ok(())` - 数据已添加到缓冲区
-    /// - `Err(BufferOverflow)` - 缓冲区已满
+    /// - `Ok(())` - Data added to buffer
+    /// - `Err(BufferOverflow)` - Buffer is full
     pub fn feed(&mut self, data: &[u8]) -> ParseResult<()> {
-        // 检查缓冲区大小限制
+        // Check buffer size limit
         let new_size = self.buffer.len() + data.len();
         if new_size > self.max_buffer_size {
             return Err(ParseError::BufferOverflow {
@@ -156,7 +156,7 @@ impl EventStreamDecoder {
 
         self.buffer.extend_from_slice(data);
 
-        // 从 Recovering 状态恢复到 Ready
+        // Recover from Recovering state to Ready
         if self.state == DecoderState::Recovering {
             self.state = DecoderState::Ready;
         }
@@ -164,41 +164,41 @@ impl EventStreamDecoder {
         Ok(())
     }
 
-    /// 尝试解码下一个帧
+    /// Try to decode next frame
     ///
     /// # Returns
-    /// - `Ok(Some(frame))` - 成功解码一个帧
-    /// - `Ok(None)` - 数据不足，需要更多数据
-    /// - `Err(e)` - 解码错误
+    /// - `Ok(Some(frame))` - Successfully decoded a frame
+    /// - `Ok(None)` - Insufficient data, need more data
+    /// - `Err(e)` - Decode error
     pub fn decode(&mut self) -> ParseResult<Option<Frame>> {
-        // 如果已停止，直接返回错误
+        // If stopped, return error directly
         if self.state == DecoderState::Stopped {
             return Err(ParseError::TooManyErrors {
                 count: self.error_count,
-                last_error: "解码器已停止".to_string(),
+                last_error: "Decoder stopped".to_string(),
             });
         }
 
-        // 缓冲区为空，保持 Ready 状态
+        // Buffer is empty, stay in Ready state
         if self.buffer.is_empty() {
             self.state = DecoderState::Ready;
             return Ok(None);
         }
 
-        // 转移到 Parsing 状态
+        // Transition to Parsing state
         self.state = DecoderState::Parsing;
 
         match parse_frame(&self.buffer) {
             Ok(Some((frame, consumed))) => {
-                // 成功解析
+                // Successfully parsed
                 self.buffer.advance(consumed);
                 self.state = DecoderState::Ready;
                 self.frames_decoded += 1;
-                self.error_count = 0; // 重置连续错误计数
+                self.error_count = 0; // Reset consecutive error count
                 Ok(Some(frame))
             }
             Ok(None) => {
-                // 数据不足，回到 Ready 状态等待更多数据
+                // Insufficient data, return to Ready state waiting for more data
                 self.state = DecoderState::Ready;
                 Ok(None)
             }
@@ -206,11 +206,11 @@ impl EventStreamDecoder {
                 self.error_count += 1;
                 let error_msg = e.to_string();
 
-                // 检查是否超过最大错误数
+                // Check if exceeded maximum errors
                 if self.error_count >= self.max_errors {
                     self.state = DecoderState::Stopped;
                     tracing::error!(
-                        "解码器停止: 连续 {} 次错误，最后错误: {}",
+                        "Decoder stopped: {} consecutive errors, last error: {}",
                         self.error_count,
                         error_msg
                     );
@@ -220,7 +220,7 @@ impl EventStreamDecoder {
                     });
                 }
 
-                // 根据错误类型采用不同的恢复策略
+                // Apply different recovery strategies based on error type
                 self.try_recover(&e);
                 self.state = DecoderState::Recovering;
                 Err(e)
@@ -228,23 +228,23 @@ impl EventStreamDecoder {
         }
     }
 
-    /// 创建解码迭代器
+    /// Create decode iterator
     pub fn decode_iter(&mut self) -> DecodeIter<'_> {
         DecodeIter { decoder: self }
     }
 
-    /// 尝试容错恢复
+    /// Attempt fault-tolerant recovery
     ///
-    /// 根据错误类型采用不同的恢复策略（参考 kiro-kt 的设计）：
-    /// - Prelude 阶段错误（CRC 失败、长度异常）：跳过 1 字节，尝试找下一帧边界
-    /// - Data 阶段错误（Message CRC 失败、Header 解析失败）：跳过整个损坏帧
+    /// Apply different recovery strategies based on error type (based on kiro-kt design):
+    /// - Prelude phase errors (CRC failure, length anomaly): Skip 1 byte, try to find next frame boundary
+    /// - Data phase errors (Message CRC failure, Header parse failure): Skip entire corrupted frame
     fn try_recover(&mut self, error: &ParseError) {
         if self.buffer.is_empty() {
             return;
         }
 
         match error {
-            // Prelude 阶段错误：可能是帧边界错位，逐字节扫描找下一个有效边界
+            // Prelude phase errors: Frame boundary may be misaligned, scan byte by byte to find next valid boundary
             ParseError::PreludeCrcMismatch { .. }
             | ParseError::MessageTooSmall { .. }
             | ParseError::MessageTooLarge { .. } => {
@@ -252,15 +252,15 @@ impl EventStreamDecoder {
                 self.buffer.advance(1);
                 self.bytes_skipped += 1;
                 tracing::warn!(
-                    "Prelude 错误恢复: 跳过字节 0x{:02x} (累计跳过 {} 字节)",
+                    "Prelude error recovery: skipped byte 0x{:02x} (total skipped {} bytes)",
                     skipped_byte,
                     self.bytes_skipped
                 );
             }
 
-            // Data 阶段错误：帧边界正确但数据损坏，跳过整个帧
+            // Data phase errors: Frame boundary correct but data corrupted, skip entire frame
             ParseError::MessageCrcMismatch { .. } | ParseError::HeaderParseFailed(_) => {
-                // 尝试读取 total_length 来跳过整帧
+                // Try to read total_length to skip entire frame
                 if self.buffer.len() >= PRELUDE_SIZE {
                     let total_length = u32::from_be_bytes([
                         self.buffer[0],
@@ -269,33 +269,33 @@ impl EventStreamDecoder {
                         self.buffer[3],
                     ]) as usize;
 
-                    // 确保 total_length 合理且缓冲区有足够数据
+                    // Ensure total_length is reasonable and buffer has enough data
                     if total_length >= 16 && total_length <= self.buffer.len() {
-                        tracing::warn!("Data 错误恢复: 跳过损坏帧 ({} 字节)", total_length);
+                        tracing::warn!("Data error recovery: skipped corrupted frame ({} bytes)", total_length);
                         self.buffer.advance(total_length);
                         self.bytes_skipped += total_length;
                         return;
                     }
                 }
 
-                // 无法确定帧长度，回退到逐字节跳过
+                // Cannot determine frame length, fall back to byte-by-byte skip
                 let skipped_byte = self.buffer[0];
                 self.buffer.advance(1);
                 self.bytes_skipped += 1;
                 tracing::warn!(
-                    "Data 错误恢复 (回退): 跳过字节 0x{:02x} (累计跳过 {} 字节)",
+                    "Data error recovery (fallback): skipped byte 0x{:02x} (total skipped {} bytes)",
                     skipped_byte,
                     self.bytes_skipped
                 );
             }
 
-            // 其他错误：逐字节跳过
+            // Other errors: Skip byte by byte
             _ => {
                 let skipped_byte = self.buffer[0];
                 self.buffer.advance(1);
                 self.bytes_skipped += 1;
                 tracing::warn!(
-                    "通用错误恢复: 跳过字节 0x{:02x} (累计跳过 {} 字节)",
+                    "Generic error recovery: skipped byte 0x{:02x} (total skipped {} bytes)",
                     skipped_byte,
                     self.bytes_skipped
                 );
@@ -303,11 +303,11 @@ impl EventStreamDecoder {
         }
     }
 
-    // ==================== 生命周期管理方法 ====================
+    // ==================== Lifecycle management methods ====================
 
-    /// 重置解码器到初始状态
+    /// Reset decoder to initial state
     ///
-    /// 清空缓冲区和所有计数器，恢复到 Ready 状态
+    /// Clear buffer and all counters, restore to Ready state
     pub fn reset(&mut self) {
         self.buffer.clear();
         self.state = DecoderState::Ready;
@@ -316,60 +316,60 @@ impl EventStreamDecoder {
         self.bytes_skipped = 0;
     }
 
-    /// 获取当前状态
+    /// Get current state
     pub fn state(&self) -> DecoderState {
         self.state
     }
 
-    /// 检查是否处于 Ready 状态
+    /// Check if in Ready state
     pub fn is_ready(&self) -> bool {
         self.state == DecoderState::Ready
     }
 
-    /// 检查是否处于 Stopped 状态
+    /// Check if in Stopped state
     pub fn is_stopped(&self) -> bool {
         self.state == DecoderState::Stopped
     }
 
-    /// 检查是否处于 Recovering 状态
+    /// Check if in Recovering state
     pub fn is_recovering(&self) -> bool {
         self.state == DecoderState::Recovering
     }
 
-    /// 获取已解码的帧数量
+    /// Get number of decoded frames
     pub fn frames_decoded(&self) -> usize {
         self.frames_decoded
     }
 
-    /// 获取当前连续错误计数
+    /// Get current consecutive error count
     pub fn error_count(&self) -> usize {
         self.error_count
     }
 
-    /// 获取跳过的字节数
+    /// Get number of skipped bytes
     pub fn bytes_skipped(&self) -> usize {
         self.bytes_skipped
     }
 
-    /// 获取缓冲区中待处理的字节数
+    /// Get number of pending bytes in buffer
     pub fn buffer_len(&self) -> usize {
         self.buffer.len()
     }
 
-    /// 尝试从 Stopped 状态恢复
+    /// Try to resume from Stopped state
     ///
-    /// 重置错误计数并转移到 Ready 状态
-    /// 注意：缓冲区内容保留，可能仍包含损坏数据
+    /// Reset error count and transition to Ready state
+    /// Note: Buffer contents are preserved, may still contain corrupted data
     pub fn try_resume(&mut self) {
         if self.state == DecoderState::Stopped {
             self.error_count = 0;
             self.state = DecoderState::Ready;
-            tracing::info!("解码器从 Stopped 状态恢复");
+            tracing::info!("Decoder resumed from Stopped state");
         }
     }
 }
 
-/// 解码迭代器
+/// Decode iterator
 pub struct DecodeIter<'a> {
     decoder: &'a mut EventStreamDecoder,
 }
@@ -378,7 +378,7 @@ impl<'a> Iterator for DecodeIter<'a> {
     type Item = ParseResult<Frame>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // 如果处于 Stopped 或 Recovering 状态，停止迭代
+        // If in Stopped or Recovering state, stop iteration
         match self.decoder.state {
             DecoderState::Stopped => return None,
             DecoderState::Recovering => return None,
@@ -444,7 +444,7 @@ mod tests {
     fn test_decoder_state_transitions() {
         let decoder = EventStreamDecoder::new();
 
-        // 初始状态
+        // Initial state
         assert!(decoder.is_ready());
         assert!(!decoder.is_stopped());
         assert!(!decoder.is_recovering());
@@ -454,7 +454,7 @@ mod tests {
     fn test_decoder_try_resume() {
         let mut decoder = EventStreamDecoder::new();
 
-        // 手动设置为 Stopped 状态进行测试
+        // Manually set to Stopped state for testing
         decoder.state = DecoderState::Stopped;
         decoder.error_count = 5;
 

@@ -16,7 +16,7 @@ impl Default for TlsBackend {
     }
 }
 
-/// KNA 应用配置
+/// KNA application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -29,12 +29,12 @@ pub struct Config {
     #[serde(default = "default_region")]
     pub region: String,
 
-    /// Auth Region（用于 Token 刷新），未配置时回退到 region
+    /// Auth Region (for token refresh), falls back to region if not configured
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_region: Option<String>,
 
-    /// API Region（用于 API 请求），未配置时回退到 region
+    /// API Region (for API requests), falls back to region if not configured
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_region: Option<String>,
@@ -57,40 +57,40 @@ pub struct Config {
     #[serde(default = "default_tls_backend")]
     pub tls_backend: TlsBackend,
 
-    /// 外部 count_tokens API 地址（可选）
+    /// External count_tokens API URL (optional)
     #[serde(default)]
     pub count_tokens_api_url: Option<String>,
 
-    /// count_tokens API 密钥（可选）
+    /// count_tokens API key (optional)
     #[serde(default)]
     pub count_tokens_api_key: Option<String>,
 
-    /// count_tokens API 认证类型（可选，"x-api-key" 或 "bearer"，默认 "x-api-key"）
+    /// count_tokens API auth type (optional, "x-api-key" or "bearer", default "x-api-key")
     #[serde(default = "default_count_tokens_auth_type")]
     pub count_tokens_auth_type: String,
 
-    /// HTTP 代理地址（可选）
-    /// 支持格式: http://host:port, https://host:port, socks5://host:port
+    /// HTTP proxy URL (optional)
+    /// Supported formats: http://host:port, https://host:port, socks5://host:port
     #[serde(default)]
     pub proxy_url: Option<String>,
 
-    /// 代理认证用户名（可选）
+    /// Proxy authentication username (optional)
     #[serde(default)]
     pub proxy_username: Option<String>,
 
-    /// 代理认证密码（可选）
+    /// Proxy authentication password (optional)
     #[serde(default)]
     pub proxy_password: Option<String>,
 
-    /// Admin API 密钥（可选，启用 Admin API 功能）
+    /// Admin API key (optional, enables Admin API functionality)
     #[serde(default)]
     pub admin_api_key: Option<String>,
 
-    /// 负载均衡模式（"priority" 或 "balanced"）
+    /// Load balancing mode ("priority" or "balanced")
     #[serde(default = "default_load_balancing_mode")]
     pub load_balancing_mode: String,
 
-    /// 配置文件路径（运行时元数据，不写入 JSON）
+    /// Config file path (runtime metadata, not written to JSON)
     #[serde(skip)]
     config_path: Option<PathBuf>,
 }
@@ -160,28 +160,28 @@ impl Default for Config {
 }
 
 impl Config {
-    /// 获取默认配置文件路径
+    /// Get default config file path
     pub fn default_config_path() -> &'static str {
         "config.json"
     }
 
-    /// 获取有效的 Auth Region（用于 Token 刷新）
-    /// 优先使用 auth_region，未配置时回退到 region
+    /// Get effective Auth Region (for token refresh)
+    /// Prefers auth_region, falls back to region if not configured
     pub fn effective_auth_region(&self) -> &str {
         self.auth_region.as_deref().unwrap_or(&self.region)
     }
 
-    /// 获取有效的 API Region（用于 API 请求）
-    /// 优先使用 api_region，未配置时回退到 region
+    /// Get effective API Region (for API requests)
+    /// Prefers api_region, falls back to region if not configured
     pub fn effective_api_region(&self) -> &str {
         self.api_region.as_deref().unwrap_or(&self.region)
     }
 
-    /// 从文件加载配置
+    /// Load configuration from file
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
         if !path.exists() {
-            // 配置文件不存在，返回默认配置
+            // Config file doesn't exist, return default config
             let mut config = Self::default();
             config.config_path = Some(path.to_path_buf());
             return Ok(config);
@@ -193,20 +193,20 @@ impl Config {
         Ok(config)
     }
 
-    /// 获取配置文件路径（如果有）
+    /// Get config file path (if available)
     pub fn config_path(&self) -> Option<&Path> {
         self.config_path.as_deref()
     }
 
-    /// 将当前配置写回原始配置文件
+    /// Write current config back to original config file
     pub fn save(&self) -> anyhow::Result<()> {
         let path = self
             .config_path
             .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("配置文件路径未知，无法保存配置"))?;
+            .ok_or_else(|| anyhow::anyhow!("Config file path unknown, cannot save config"))?;
 
-        let content = serde_json::to_string_pretty(self).context("序列化配置失败")?;
-        fs::write(path, content).with_context(|| format!("写入配置文件失败: {}", path.display()))?;
+        let content = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
+        fs::write(path, content).with_context(|| format!("Failed to write config file: {}", path.display()))?;
         Ok(())
     }
 }

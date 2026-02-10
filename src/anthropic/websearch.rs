@@ -1,6 +1,6 @@
-//! WebSearch 工具处理模块
+//! WebSearch tool processing module
 //!
-//! 实现 Anthropic WebSearch 请求到 Kiro MCP 的转换和响应生成
+//! Implements conversion from Anthropic WebSearch requests to Kiro MCP and response generation
 
 use std::convert::Infallible;
 
@@ -18,7 +18,7 @@ use uuid::Uuid;
 use super::stream::SseEvent;
 use super::types::{ErrorResponse, MessagesRequest};
 
-/// MCP 请求
+/// MCP request
 #[derive(Debug, Serialize)]
 pub struct McpRequest {
     pub id: String,
@@ -27,20 +27,20 @@ pub struct McpRequest {
     pub params: McpParams,
 }
 
-/// MCP 请求参数
+/// MCP request parameters
 #[derive(Debug, Serialize)]
 pub struct McpParams {
     pub name: String,
     pub arguments: McpArguments,
 }
 
-/// MCP 参数
+/// MCP arguments
 #[derive(Debug, Serialize)]
 pub struct McpArguments {
     pub query: String,
 }
 
-/// MCP 响应
+/// MCP response
 #[derive(Debug, Deserialize)]
 pub struct McpResponse {
     pub error: Option<McpError>,
@@ -49,14 +49,14 @@ pub struct McpResponse {
     pub result: Option<McpResult>,
 }
 
-/// MCP 错误
+/// MCP error
 #[derive(Debug, Deserialize)]
 pub struct McpError {
     pub code: Option<i32>,
     pub message: Option<String>,
 }
 
-/// MCP 结果
+/// MCP result
 #[derive(Debug, Deserialize)]
 pub struct McpResult {
     pub content: Vec<McpContent>,
@@ -64,7 +64,7 @@ pub struct McpResult {
     pub is_error: bool,
 }
 
-/// MCP 内容
+/// MCP content
 #[derive(Debug, Deserialize)]
 pub struct McpContent {
     #[serde(rename = "type")]
@@ -72,7 +72,7 @@ pub struct McpContent {
     pub text: String,
 }
 
-/// WebSearch 搜索结果
+/// WebSearch search results
 #[derive(Debug, Deserialize)]
 pub struct WebSearchResults {
     pub results: Vec<WebSearchResult>,
@@ -82,7 +82,7 @@ pub struct WebSearchResults {
     pub error: Option<String>,
 }
 
-/// 单个搜索结果
+/// Single search result
 #[derive(Debug, Deserialize, Clone)]
 pub struct WebSearchResult {
     pub title: String,
@@ -98,28 +98,28 @@ pub struct WebSearchResult {
     pub public_domain: Option<bool>,
 }
 
-/// 检查请求是否为纯 WebSearch 请求
+/// Check if request is a pure WebSearch request
 ///
-/// 条件：tools 有且只有一个，且 name 为 web_search
+/// Condition: tools has exactly one item, and name is web_search
 pub fn has_web_search_tool(req: &MessagesRequest) -> bool {
     req.tools.as_ref().is_some_and(|tools| {
         tools.len() == 1 && tools.first().is_some_and(|t| t.name == "web_search")
     })
 }
 
-/// 从消息中提取搜索查询
+/// Extract search query from messages
 ///
-/// 读取 messages 的第一条消息的第一个内容块
-/// 并去除 "Perform a web search for the query: " 前缀
+/// Reads the first content block of the first message
+/// and removes the "Perform a web search for the query: " prefix
 pub fn extract_search_query(req: &MessagesRequest) -> Option<String> {
-    // 获取第一条消息
+    // Get the first message
     let first_msg = req.messages.first()?;
 
-    // 提取文本内容
+    // Extract text content
     let text = match &first_msg.content {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Array(arr) => {
-            // 获取第一个内容块
+            // Get the first content block
             let first_block = arr.first()?;
             if first_block.get("type")?.as_str()? == "text" {
                 first_block.get("text")?.as_str()?.to_string()
@@ -130,7 +130,7 @@ pub fn extract_search_query(req: &MessagesRequest) -> Option<String> {
         _ => return None,
     };
 
-    // 去除前缀 "Perform a web search for the query: "
+    // Remove prefix "Perform a web search for the query: "
     const PREFIX: &str = "Perform a web search for the query: ";
     let query = if text.starts_with(PREFIX) {
         text[PREFIX.len()..].to_string()
@@ -141,7 +141,7 @@ pub fn extract_search_query(req: &MessagesRequest) -> Option<String> {
     if query.is_empty() { None } else { Some(query) }
 }
 
-/// 生成22位大小写字母和数字的随机字符串
+/// Generate 22-character random string with uppercase/lowercase letters and digits
 fn generate_random_id_22() -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     (0..22)
@@ -152,7 +152,7 @@ fn generate_random_id_22() -> String {
         .collect()
 }
 
-/// 生成8位小写字母和数字的随机字符串
+/// Generate 8-character random string with lowercase letters and digits
 fn generate_random_id_8() -> String {
     const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     (0..8)
@@ -163,9 +163,9 @@ fn generate_random_id_8() -> String {
         .collect()
 }
 
-/// 创建 MCP 请求
+/// Create MCP request
 ///
-/// ID 格式: web_search_tooluse_{22位随机}_{毫秒时间戳}_{8位随机}
+/// ID format: web_search_tooluse_{22-char random}_{millisecond timestamp}_{8-char random}
 pub fn create_mcp_request(query: &str) -> (String, McpRequest) {
     let random_22 = generate_random_id_22();
     let timestamp = chrono::Utc::now().timestamp_millis();
@@ -176,7 +176,7 @@ pub fn create_mcp_request(query: &str) -> (String, McpRequest) {
         random_22, timestamp, random_8
     );
 
-    // tool_use_id 使用相同格式
+    // tool_use_id uses the same format
     let tool_use_id = format!(
         "srvtoolu_{}",
         Uuid::new_v4().to_string().replace('-', "")[..32].to_string()
@@ -197,7 +197,7 @@ pub fn create_mcp_request(query: &str) -> (String, McpRequest) {
     (tool_use_id, request)
 }
 
-/// 解析 MCP 响应中的搜索结果
+/// Parse search results from MCP response
 pub fn parse_search_results(mcp_response: &McpResponse) -> Option<WebSearchResults> {
     let result = mcp_response.result.as_ref()?;
     let content = result.content.first()?;
@@ -209,7 +209,7 @@ pub fn parse_search_results(mcp_response: &McpResponse) -> Option<WebSearchResul
     serde_json::from_str(&content.text).ok()
 }
 
-/// 生成 WebSearch SSE 响应流
+/// Generate WebSearch SSE response stream
 pub fn create_websearch_sse_stream(
     model: String,
     query: String,
@@ -227,7 +227,7 @@ pub fn create_websearch_sse_stream(
     )
 }
 
-/// 生成 WebSearch SSE 事件序列
+/// Generate WebSearch SSE event sequence
 fn generate_websearch_events(
     model: &str,
     query: &str,
@@ -356,10 +356,10 @@ fn generate_websearch_events(
         }),
     ));
 
-    // 8. content_block_delta (text_delta) - 生成搜索结果摘要
+    // 8. content_block_delta (text_delta) - generate search results summary
     let summary = generate_search_summary(query, &search_results);
 
-    // 分块发送文本
+    // Send text in chunks
     let chunk_size = 100;
     for chunk in summary.chars().collect::<Vec<_>>().chunks(chunk_size) {
         let text: String = chunk.iter().collect();
@@ -386,7 +386,7 @@ fn generate_websearch_events(
     ));
 
     // 10. message_delta
-    let output_tokens = (summary.len() as i32 + 3) / 4; // 简单估算
+    let output_tokens = (summary.len() as i32 + 3) / 4; // Simple estimation
     events.push(SseEvent::new(
         "message_delta",
         json!({
@@ -412,7 +412,7 @@ fn generate_websearch_events(
     events
 }
 
-/// 生成搜索结果摘要
+/// Generate search results summary
 fn generate_search_summary(query: &str, results: &Option<WebSearchResults>) -> String {
     let mut summary = format!("Here are the search results for \"{}\":\n\n", query);
 
@@ -420,7 +420,7 @@ fn generate_search_summary(query: &str, results: &Option<WebSearchResults>) -> S
         for (i, result) in results.results.iter().enumerate() {
             summary.push_str(&format!("{}. **{}**\n", i + 1, result.title));
             if let Some(ref snippet) = result.snippet {
-                // 截断过长的摘要（安全处理 UTF-8 多字节字符）
+            // Truncate long snippets (safely handle UTF-8 multi-byte characters)
                 let truncated = match snippet.char_indices().nth(200) {
                     Some((idx, _)) => format!("{}...", &snippet[..idx]),
                     None => snippet.clone(),
@@ -438,13 +438,13 @@ fn generate_search_summary(query: &str, results: &Option<WebSearchResults>) -> S
     summary
 }
 
-/// 处理 WebSearch 请求
+/// Handle WebSearch request
 pub async fn handle_websearch_request(
     provider: std::sync::Arc<crate::kiro::provider::KiroProvider>,
     payload: &MessagesRequest,
     input_tokens: i32,
 ) -> Response {
-    // 1. 提取搜索查询
+    // 1. Extract search query
     let query = match extract_search_query(payload) {
         Some(q) => q,
         None => {
@@ -452,28 +452,28 @@ pub async fn handle_websearch_request(
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse::new(
                     "invalid_request_error",
-                    "无法从消息中提取搜索查询",
+                    "Unable to extract search query from message",
                 )),
             )
                 .into_response();
         }
     };
 
-    tracing::info!(query = %query, "处理 WebSearch 请求");
+    tracing::info!(query = %query, "Processing WebSearch request");
 
-    // 2. 创建 MCP 请求
+    // 2. Create MCP request
     let (tool_use_id, mcp_request) = create_mcp_request(&query);
 
-    // 3. 调用 Kiro MCP API
+    // 3. Call Kiro MCP API
     let search_results = match call_mcp_api(&provider, &mcp_request).await {
         Ok(response) => parse_search_results(&response),
         Err(e) => {
-            tracing::warn!("MCP API 调用失败: {}", e);
+            tracing::warn!("MCP API call failed: {}", e);
             None
         }
     };
 
-    // 4. 生成 SSE 响应
+    // 4. Generate SSE response
     let model = payload.model.clone();
     let stream =
         create_websearch_sse_stream(model, query, tool_use_id, search_results, input_tokens);
@@ -487,7 +487,7 @@ pub async fn handle_websearch_request(
         .unwrap()
 }
 
-/// 调用 Kiro MCP API
+/// Call Kiro MCP API
 async fn call_mcp_api(
     provider: &crate::kiro::provider::KiroProvider,
     request: &McpRequest,
@@ -582,7 +582,7 @@ mod tests {
             metadata: None,
         };
 
-        // 多个工具时不应该被识别为纯 websearch 请求
+        // Should not be recognized as pure websearch request when there are multiple tools
         assert!(!has_web_search_tool(&req));
     }
 
@@ -610,7 +610,7 @@ mod tests {
         };
 
         let query = extract_search_query(&req);
-        // 前缀应该被去除
+        // Prefix should be removed
         assert_eq!(query, Some("rust latest version 2026".to_string()));
     }
 
@@ -648,7 +648,7 @@ mod tests {
         assert_eq!(request.params.name, "web_search");
         assert_eq!(request.params.arguments.query, "test query");
 
-        // 验证 ID 格式: web_search_tooluse_{22位}_{时间戳}_{8位}
+        // Verify ID format: web_search_tooluse_{22-char}_{timestamp}_{8-char}
         assert!(request.id.starts_with("web_search_tooluse_"));
     }
 
@@ -656,22 +656,22 @@ mod tests {
     fn test_mcp_request_id_format() {
         let (_, request) = create_mcp_request("test");
 
-        // 格式: web_search_tooluse_{22位}_{毫秒时间戳}_{8位}
+        // Format: web_search_tooluse_{22-char}_{millisecond timestamp}_{8-char}
         let id = &request.id;
         assert!(id.starts_with("web_search_tooluse_"));
 
         let suffix = &id["web_search_tooluse_".len()..];
         let parts: Vec<&str> = suffix.split('_').collect();
-        assert_eq!(parts.len(), 3, "应该有3个部分: 22位随机_时间戳_8位随机");
+        assert_eq!(parts.len(), 3, "Should have 3 parts: 22-char random_timestamp_8-char random");
 
-        // 第一部分: 22位大小写字母和数字
+        // First part: 22-character alphanumeric
         assert_eq!(parts[0].len(), 22);
         assert!(parts[0].chars().all(|c| c.is_ascii_alphanumeric()));
 
-        // 第二部分: 毫秒时间戳
+        // Second part: millisecond timestamp
         assert!(parts[1].parse::<i64>().is_ok());
 
-        // 第三部分: 8位小写字母和数字
+        // Third part: 8-character lowercase letters and digits
         assert_eq!(parts[2].len(), 8);
         assert!(
             parts[2]

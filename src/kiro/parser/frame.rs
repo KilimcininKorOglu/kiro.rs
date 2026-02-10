@@ -1,89 +1,89 @@
-//! AWS Event Stream 消息帧解析
+//! AWS Event Stream message frame parsing
 //!
-//! ## 消息格式
+//! ## Message Format
 //!
 //! ```text
 //! ┌──────────────┬──────────────┬──────────────┬──────────┬──────────┬───────────┐
 //! │ Total Length │ Header Length│ Prelude CRC  │ Headers  │ Payload  │ Msg CRC   │
-//! │   (4 bytes)  │   (4 bytes)  │   (4 bytes)  │ (变长)    │ (变长)    │ (4 bytes) │
+//! │   (4 bytes)  │   (4 bytes)  │   (4 bytes)  │ (var)    │ (var)    │ (4 bytes) │
 //! └──────────────┴──────────────┴──────────────┴──────────┴──────────┴───────────┘
 //! ```
 //!
-//! - Total Length: 整个消息的总长度（包括自身 4 字节）
-//! - Header Length: 头部数据的长度
-//! - Prelude CRC: 前 8 字节（Total Length + Header Length）的 CRC32 校验
-//! - Headers: 头部数据
-//! - Payload: 载荷数据（通常是 JSON）
-//! - Message CRC: 整个消息（不含 Message CRC 自身）的 CRC32 校验
+//! - Total Length: Total length of the entire message (including its own 4 bytes)
+//! - Header Length: Length of header data
+//! - Prelude CRC: CRC32 checksum of first 8 bytes (Total Length + Header Length)
+//! - Headers: Header data
+//! - Payload: Payload data (usually JSON)
+//! - Message CRC: CRC32 checksum of entire message (excluding Message CRC itself)
 
 use super::crc::crc32;
 use super::error::{ParseError, ParseResult};
 use super::header::{Headers, parse_headers};
 
-/// Prelude 固定大小 (12 字节)
+/// Prelude fixed size (12 bytes)
 pub const PRELUDE_SIZE: usize = 12;
 
-/// 最小消息大小 (Prelude + Message CRC)
+/// Minimum message size (Prelude + Message CRC)
 pub const MIN_MESSAGE_SIZE: usize = PRELUDE_SIZE + 4;
 
-/// 最大消息大小限制 (16 MB)
+/// Maximum message size limit (16 MB)
 pub const MAX_MESSAGE_SIZE: u32 = 16 * 1024 * 1024;
 
-/// 解析后的消息帧
+/// Parsed message frame
 #[derive(Debug, Clone)]
 pub struct Frame {
-    /// 消息头部
+    /// Message headers
     pub headers: Headers,
-    /// 消息负载
+    /// Message payload
     pub payload: Vec<u8>,
 }
 
 impl Frame {
-    /// 获取消息类型
+    /// Get message type
     pub fn message_type(&self) -> Option<&str> {
         self.headers.message_type()
     }
 
-    /// 获取事件类型
+    /// Get event type
     pub fn event_type(&self) -> Option<&str> {
         self.headers.event_type()
     }
 
-    /// 将 payload 解析为 JSON
+    /// Parse payload as JSON
     pub fn payload_as_json<T: serde::de::DeserializeOwned>(&self) -> ParseResult<T> {
         serde_json::from_slice(&self.payload).map_err(ParseError::PayloadDeserialize)
     }
 
-    /// 将 payload 解析为字符串
+    /// Parse payload as string
     pub fn payload_as_str(&self) -> String {
         String::from_utf8_lossy(&self.payload).to_string()
     }
 }
 
-/// 尝试从缓冲区解析一个完整的帧
+/// Try to parse a complete frame from buffer
 ///
-/// 这是一个无状态的纯函数，每次调用独立解析。
-/// 缓冲区管理由上层 `EventStreamDecoder` 负责。
+/// This is a stateless pure function, each call parses independently.
+/// Buffer management is handled by the upper layer `EventStreamDecoder`.
 ///
 /// # Arguments
-/// * `buffer` - 输入缓冲区
+/// * `buffer` - Input buffer
 ///
 /// # Returns
-/// - `Ok(Some((frame, consumed)))` - 成功解析，返回帧和消费的字节数
-/// - `Ok(None)` - 数据不足，需要更多数据
-/// - `Err(e)` - 解析错误
+/// - `Ok(Some((frame, consumed)))` - Successfully parsed, returns frame and consumed bytes
+/// - `Ok(None)` - Insufficient data, need more data
+/// - `Err(e)` - Parse error
 pub fn parse_frame(buffer: &[u8]) -> ParseResult<Option<(Frame, usize)>> {
-    // 检查是否有足够的数据读取 prelude
+    // Check if there's enough data to read prelude
     if buffer.len() < PRELUDE_SIZE {
         return Ok(None);
     }
 
-    // 读取 prelude
+    // Read prelude
     let total_length = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
     let header_length = u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
     let prelude_crc = u32::from_be_bytes([buffer[8], buffer[9], buffer[10], buffer[11]]);
 
-    // 验证消息长度范围
+    // Validate message length range
     if total_length < MIN_MESSAGE_SIZE as u32 {
         return Err(ParseError::MessageTooSmall {
             length: total_length,
@@ -101,12 +101,12 @@ pub fn parse_frame(buffer: &[u8]) -> ParseResult<Option<(Frame, usize)>> {
     let total_length = total_length as usize;
     let header_length = header_length as usize;
 
-    // 检查是否有完整的消息
+    // Check if we have the complete message
     if buffer.len() < total_length {
         return Ok(None);
     }
 
-    // 验证 Prelude CRC
+    // Verify Prelude CRC
     let actual_prelude_crc = crc32(&buffer[..8]);
     if actual_prelude_crc != prelude_crc {
         return Err(ParseError::PreludeCrcMismatch {
@@ -115,7 +115,7 @@ pub fn parse_frame(buffer: &[u8]) -> ParseResult<Option<(Frame, usize)>> {
         });
     }
 
-    // 读取 Message CRC
+    // Read Message CRC
     let message_crc = u32::from_be_bytes([
         buffer[total_length - 4],
         buffer[total_length - 3],
@@ -123,7 +123,7 @@ pub fn parse_frame(buffer: &[u8]) -> ParseResult<Option<(Frame, usize)>> {
         buffer[total_length - 1],
     ]);
 
-    // 验证 Message CRC (对整个消息不含最后4字节)
+    // Verify Message CRC (for entire message excluding last 4 bytes)
     let actual_message_crc = crc32(&buffer[..total_length - 4]);
     if actual_message_crc != message_crc {
         return Err(ParseError::MessageCrcMismatch {
@@ -132,20 +132,20 @@ pub fn parse_frame(buffer: &[u8]) -> ParseResult<Option<(Frame, usize)>> {
         });
     }
 
-    // 解析头部
+    // Parse headers
     let headers_start = PRELUDE_SIZE;
     let headers_end = headers_start + header_length;
 
-    // 验证头部边界
+    // Validate header boundaries
     if headers_end > total_length - 4 {
         return Err(ParseError::HeaderParseFailed(
-            "头部长度超出消息边界".to_string(),
+            "Header length exceeds message boundary".to_string(),
         ));
     }
 
     let headers = parse_headers(&buffer[headers_start..headers_end], header_length)?;
 
-    // 提取 payload (去除最后4字节的 message_crc)
+    // Extract payload (excluding last 4 bytes of message_crc)
     let payload_start = headers_end;
     let payload_end = total_length - 4;
     let payload = buffer[payload_start..payload_end].to_vec();
@@ -159,13 +159,13 @@ mod tests {
 
     #[test]
     fn test_frame_insufficient_data() {
-        let buffer = [0u8; 10]; // 小于 PRELUDE_SIZE
+        let buffer = [0u8; 10]; // Less than PRELUDE_SIZE
         assert!(matches!(parse_frame(&buffer), Ok(None)));
     }
 
     #[test]
     fn test_frame_message_too_small() {
-        // 构造一个 total_length = 10 的 prelude (小于最小值)
+        // Construct a prelude with total_length = 10 (less than minimum)
         let mut buffer = vec![0u8; 16];
         buffer[0..4].copy_from_slice(&10u32.to_be_bytes()); // total_length
         buffer[4..8].copy_from_slice(&0u32.to_be_bytes()); // header_length

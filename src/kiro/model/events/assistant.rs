@@ -1,6 +1,6 @@
-//! 助手响应事件
+//! Assistant response event
 //!
-//! 处理 assistantResponseEvent 类型的事件
+//! Handles assistantResponseEvent type events
 
 use serde::{Deserialize, Serialize};
 
@@ -9,16 +9,17 @@ use crate::kiro::parser::frame::Frame;
 
 use super::base::EventPayload;
 
-/// 助手响应事件
+/// Assistant response event
 ///
-/// 包含 AI 助手的流式响应内容
+/// Contains streaming response content from the AI assistant
 ///
-/// # 设计说明
+/// # Design Notes
 ///
-/// 此结构体只保留实际使用的 `content` 字段，其他 API 返回的字段
-/// 通过 `#[serde(flatten)]` 捕获到 `extra` 中，确保反序列化不会失败。
+/// This struct only keeps the actually used `content` field, other fields
+/// returned by the API are captured in `extra` via `#[serde(flatten)]`,
+/// ensuring deserialization won't fail.
 ///
-/// # 示例
+/// # Example
 ///
 /// ```rust
 /// use kiro_rs::kiro::model::events::AssistantResponseEvent;
@@ -30,11 +31,11 @@ use super::base::EventPayload;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssistantResponseEvent {
-    /// 响应内容片段
+    /// Response content fragment
     #[serde(default)]
     pub content: String,
 
-    /// 捕获其他未使用的字段，确保反序列化兼容性
+    /// Captures other unused fields to ensure deserialization compatibility
     #[serde(flatten)]
     #[serde(skip_serializing)]
     #[allow(dead_code)]
@@ -75,7 +76,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_with_extra_fields() {
-        // 确保包含额外字段时反序列化不会失败
+        // Ensure deserialization doesn't fail when extra fields are present
         let json = r#"{
             "content": "Done",
             "conversationId": "conv-123",
@@ -100,7 +101,7 @@ mod tests {
 
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("\"content\":\"Test\""));
-        // extra 字段不应该被序列化
+        // extra field should not be serialized
         assert!(!json.contains("extra"));
     }
 

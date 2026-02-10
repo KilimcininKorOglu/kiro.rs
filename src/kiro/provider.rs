@@ -1,8 +1,8 @@
 //! Kiro API Provider
 //!
-//! 核心组件，负责与 Kiro API 通信
-//! 支持流式和非流式请求
-//! 支持多凭据故障转移和重试
+//! Core component responsible for communicating with the Kiro API
+//! Supports streaming and non-streaming requests
+//! Supports multi-credential failover and retry
 
 use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST, HeaderMap, HeaderValue};
@@ -16,31 +16,31 @@ use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::{CallContext, MultiTokenManager};
 
-/// 每个凭据的最大重试次数
+/// Maximum retries per credential
 const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
 
-/// 总重试次数硬上限（避免无限重试）
+/// Hard limit on total retries (to prevent infinite retries)
 const MAX_TOTAL_RETRIES: usize = 9;
 
 /// Kiro API Provider
 ///
-/// 核心组件，负责与 Kiro API 通信
-/// 支持多凭据故障转移和重试机制
+/// Core component responsible for communicating with the Kiro API
+/// Supports multi-credential failover and retry mechanism
 pub struct KiroProvider {
     token_manager: Arc<MultiTokenManager>,
     client: Client,
 }
 
 impl KiroProvider {
-    /// 创建新的 KiroProvider 实例
+    /// Create a new KiroProvider instance
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
         Self::with_proxy(token_manager, None)
     }
 
-    /// 创建带代理配置的 KiroProvider 实例
+    /// Create a KiroProvider instance with proxy configuration
     pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: Option<ProxyConfig>) -> Self {
         let client = build_client(proxy.as_ref(), 720, token_manager.config().tls_backend)
-            .expect("创建 HTTP 客户端失败");
+            .expect("Failed to create HTTP client");
 
         Self {
             token_manager,
@@ -48,12 +48,12 @@ impl KiroProvider {
         }
     }
 
-    /// 获取 token_manager 的引用
+    /// Get a reference to the token_manager
     pub fn token_manager(&self) -> &MultiTokenManager {
         &self.token_manager
     }
 
-    /// 获取 API 基础 URL（使用 config 级 api_region）
+    /// Get API base URL (using config-level api_region)
     pub fn base_url(&self) -> String {
         format!(
             "https://q.{}.amazonaws.com/generateAssistantResponse",
@@ -61,7 +61,7 @@ impl KiroProvider {
         )
     }
 
-    /// 获取 MCP API URL（使用 config 级 api_region）
+    /// Get MCP API URL (using config-level api_region)
     pub fn mcp_url(&self) -> String {
         format!(
             "https://q.{}.amazonaws.com/mcp",
@@ -69,12 +69,12 @@ impl KiroProvider {
         )
     }
 
-    /// 获取 API 基础域名（使用 config 级 api_region）
+    /// Get API base domain (using config-level api_region)
     pub fn base_domain(&self) -> String {
         format!("q.{}.amazonaws.com", self.token_manager.config().effective_api_region())
     }
 
-    /// 获取凭据级 API 基础 URL
+    /// Get credential-level API base URL
     fn base_url_for(&self, credentials: &KiroCredentials) -> String {
         format!(
             "https://q.{}.amazonaws.com/generateAssistantResponse",
@@ -82,7 +82,7 @@ impl KiroProvider {
         )
     }
 
-    /// 获取凭据级 MCP API URL
+    /// Get credential-level MCP API URL
     fn mcp_url_for(&self, credentials: &KiroCredentials) -> String {
         format!(
             "https://q.{}.amazonaws.com/mcp",
@@ -90,7 +90,7 @@ impl KiroProvider {
         )
     }
 
-    /// 获取凭据级 API 基础域名
+    /// Get credential-level API base domain
     fn base_domain_for(&self, credentials: &KiroCredentials) -> String {
         format!(
             "q.{}.amazonaws.com",
@@ -98,15 +98,15 @@ impl KiroProvider {
         )
     }
 
-    /// 构建请求头
+    /// Build request headers
     ///
     /// # Arguments
-    /// * `ctx` - API 调用上下文，包含凭据和 token
+    /// * `ctx` - API call context containing credentials and token
     fn build_headers(&self, ctx: &CallContext) -> anyhow::Result<HeaderMap> {
         let config = self.token_manager.config();
 
         let machine_id = machine_id::generate_from_credentials(&ctx.credentials, config)
-            .ok_or_else(|| anyhow::anyhow!("无法生成 machine_id，请检查凭证配置"))?;
+            .ok_or_else(|| anyhow::anyhow!("Failed to generate machine_id, please check credential configuration"))?;
 
         let kiro_version = &config.kiro_version;
         let os_name = &config.system_version;
@@ -153,12 +153,12 @@ impl KiroProvider {
         Ok(headers)
     }
 
-    /// 构建 MCP 请求头
+    /// Build MCP request headers
     fn build_mcp_headers(&self, ctx: &CallContext) -> anyhow::Result<HeaderMap> {
         let config = self.token_manager.config();
 
         let machine_id = machine_id::generate_from_credentials(&ctx.credentials, config)
-            .ok_or_else(|| anyhow::anyhow!("无法生成 machine_id，请检查凭证配置"))?;
+            .ok_or_else(|| anyhow::anyhow!("Failed to generate machine_id, please check credential configuration"))?;
 
         let kiro_version = &config.kiro_version;
         let os_name = &config.system_version;
@@ -173,7 +173,7 @@ impl KiroProvider {
 
         let mut headers = HeaderMap::new();
 
-        // 按照严格顺序添加请求头
+        // Add headers in strict order
         headers.insert("content-type", HeaderValue::from_static("application/json"));
         headers.insert(
             "x-amz-user-agent",
@@ -198,61 +198,61 @@ impl KiroProvider {
         Ok(headers)
     }
 
-    /// 发送非流式 API 请求
+    /// Send non-streaming API request
     ///
-    /// 支持多凭据故障转移：
-    /// - 400 Bad Request: 直接返回错误，不计入凭据失败
-    /// - 401/403: 视为凭据/权限问题，计入失败次数并允许故障转移
-    /// - 402 MONTHLY_REQUEST_COUNT: 视为额度用尽，禁用凭据并切换
-    /// - 429/5xx/网络等瞬态错误: 重试但不禁用或切换凭据（避免误把所有凭据锁死）
+    /// Supports multi-credential failover:
+    /// - 400 Bad Request: Return error directly, does not count as credential failure
+    /// - 401/403: Treated as credential/permission issue, counts as failure and allows failover
+    /// - 402 MONTHLY_REQUEST_COUNT: Treated as quota exhausted, disables credential and switches
+    /// - 429/5xx/network transient errors: Retry but don't disable or switch credentials (to avoid locking all credentials)
     ///
     /// # Arguments
-    /// * `request_body` - JSON 格式的请求体字符串
+    /// * `request_body` - JSON formatted request body string
     ///
     /// # Returns
-    /// 返回原始的 HTTP Response，不做解析
+    /// Returns raw HTTP Response without parsing
     pub async fn call_api(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
         self.call_api_with_retry(request_body, false).await
     }
 
-    /// 发送流式 API 请求
+    /// Send streaming API request
     ///
-    /// 支持多凭据故障转移：
-    /// - 400 Bad Request: 直接返回错误，不计入凭据失败
-    /// - 401/403: 视为凭据/权限问题，计入失败次数并允许故障转移
-    /// - 402 MONTHLY_REQUEST_COUNT: 视为额度用尽，禁用凭据并切换
-    /// - 429/5xx/网络等瞬态错误: 重试但不禁用或切换凭据（避免误把所有凭据锁死）
+    /// Supports multi-credential failover:
+    /// - 400 Bad Request: Return error directly, does not count as credential failure
+    /// - 401/403: Treated as credential/permission issue, counts as failure and allows failover
+    /// - 402 MONTHLY_REQUEST_COUNT: Treated as quota exhausted, disables credential and switches
+    /// - 429/5xx/network transient errors: Retry but don't disable or switch credentials (to avoid locking all credentials)
     ///
     /// # Arguments
-    /// * `request_body` - JSON 格式的请求体字符串
+    /// * `request_body` - JSON formatted request body string
     ///
     /// # Returns
-    /// 返回原始的 HTTP Response，调用方负责处理流式数据
+    /// Returns raw HTTP Response, caller is responsible for handling streaming data
     pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
         self.call_api_with_retry(request_body, true).await
     }
 
-    /// 发送 MCP API 请求
+    /// Send MCP API request
     ///
-    /// 用于 WebSearch 等工具调用
+    /// Used for tool calls like WebSearch
     ///
     /// # Arguments
-    /// * `request_body` - JSON 格式的 MCP 请求体字符串
+    /// * `request_body` - JSON formatted MCP request body string
     ///
     /// # Returns
-    /// 返回原始的 HTTP Response
+    /// Returns raw HTTP Response
     pub async fn call_mcp(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
         self.call_mcp_with_retry(request_body).await
     }
 
-    /// 内部方法：带重试逻辑的 MCP API 调用
+    /// Internal method: MCP API call with retry logic
     async fn call_mcp_with_retry(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
         let total_credentials = self.token_manager.total_count();
         let max_retries = (total_credentials * MAX_RETRIES_PER_CREDENTIAL).min(MAX_TOTAL_RETRIES);
         let mut last_error: Option<anyhow::Error> = None;
 
         for attempt in 0..max_retries {
-            // 获取调用上下文
+            // Get call context
             let ctx = match self.token_manager.acquire_context().await {
                 Ok(c) => c,
                 Err(e) => {
@@ -270,7 +270,7 @@ impl KiroProvider {
                 }
             };
 
-            // 发送请求
+            // Send request
             let response = match self
                 .client
                 .post(&url)
@@ -282,7 +282,7 @@ impl KiroProvider {
                 Ok(resp) => resp,
                 Err(e) => {
                     tracing::warn!(
-                        "MCP 请求发送失败（尝试 {}/{}）: {}",
+                        "MCP request failed to send (attempt {}/{}): {}",
                         attempt + 1,
                         max_retries,
                         e
@@ -297,79 +297,79 @@ impl KiroProvider {
 
             let status = response.status();
 
-            // 成功响应
+            // Successful response
             if status.is_success() {
                 self.token_manager.report_success(ctx.id);
                 return Ok(response);
             }
 
-            // 失败响应
+            // Failed response
             let body = response.text().await.unwrap_or_default();
 
-            // 402 额度用尽
+            // 402 quota exhausted
             if status.as_u16() == 402 && Self::is_monthly_request_limit(&body) {
                 let has_available = self.token_manager.report_quota_exhausted(ctx.id);
                 if !has_available {
-                    anyhow::bail!("MCP 请求失败（所有凭据已用尽）: {} {}", status, body);
+                    anyhow::bail!("MCP request failed (all credentials exhausted): {} {}", status, body);
                 }
-                last_error = Some(anyhow::anyhow!("MCP 请求失败: {} {}", status, body));
+                last_error = Some(anyhow::anyhow!("MCP request failed: {} {}", status, body));
                 continue;
             }
 
             // 400 Bad Request
             if status.as_u16() == 400 {
-                anyhow::bail!("MCP 请求失败: {} {}", status, body);
+                anyhow::bail!("MCP request failed: {} {}", status, body);
             }
 
-            // 401/403 凭据问题
+            // 401/403 credential issue
             if matches!(status.as_u16(), 401 | 403) {
                 let has_available = self.token_manager.report_failure(ctx.id);
                 if !has_available {
-                    anyhow::bail!("MCP 请求失败（所有凭据已用尽）: {} {}", status, body);
+                    anyhow::bail!("MCP request failed (all credentials exhausted): {} {}", status, body);
                 }
-                last_error = Some(anyhow::anyhow!("MCP 请求失败: {} {}", status, body));
+                last_error = Some(anyhow::anyhow!("MCP request failed: {} {}", status, body));
                 continue;
             }
 
-            // 瞬态错误
+            // Transient error
             if matches!(status.as_u16(), 408 | 429) || status.is_server_error() {
                 tracing::warn!(
-                    "MCP 请求失败（上游瞬态错误，尝试 {}/{}）: {} {}",
+                    "MCP request failed (upstream transient error, attempt {}/{}): {} {}",
                     attempt + 1,
                     max_retries,
                     status,
                     body
                 );
-                last_error = Some(anyhow::anyhow!("MCP 请求失败: {} {}", status, body));
+                last_error = Some(anyhow::anyhow!("MCP request failed: {} {}", status, body));
                 if attempt + 1 < max_retries {
                     sleep(Self::retry_delay(attempt)).await;
                 }
                 continue;
             }
 
-            // 其他 4xx
+            // Other 4xx
             if status.is_client_error() {
-                anyhow::bail!("MCP 请求失败: {} {}", status, body);
+                anyhow::bail!("MCP request failed: {} {}", status, body);
             }
 
-            // 兜底
-            last_error = Some(anyhow::anyhow!("MCP 请求失败: {} {}", status, body));
+            // Fallback
+            last_error = Some(anyhow::anyhow!("MCP request failed: {} {}", status, body));
             if attempt + 1 < max_retries {
                 sleep(Self::retry_delay(attempt)).await;
             }
         }
 
         Err(last_error.unwrap_or_else(|| {
-            anyhow::anyhow!("MCP 请求失败：已达到最大重试次数（{}次）", max_retries)
+            anyhow::anyhow!("MCP request failed: reached maximum retry count ({} times)", max_retries)
         }))
     }
 
-    /// 内部方法：带重试逻辑的 API 调用
+    /// Internal method: API call with retry logic
     ///
-    /// 重试策略：
-    /// - 每个凭据最多重试 MAX_RETRIES_PER_CREDENTIAL 次
-    /// - 总重试次数 = min(凭据数量 × 每凭据重试次数, MAX_TOTAL_RETRIES)
-    /// - 硬上限 9 次，避免无限重试
+    /// Retry strategy:
+    /// - Each credential retries up to MAX_RETRIES_PER_CREDENTIAL times
+    /// - Total retries = min(credential count × retries per credential, MAX_TOTAL_RETRIES)
+    /// - Hard limit of 9 times to prevent infinite retries
     async fn call_api_with_retry(
         &self,
         request_body: &str,
@@ -378,10 +378,10 @@ impl KiroProvider {
         let total_credentials = self.token_manager.total_count();
         let max_retries = (total_credentials * MAX_RETRIES_PER_CREDENTIAL).min(MAX_TOTAL_RETRIES);
         let mut last_error: Option<anyhow::Error> = None;
-        let api_type = if is_stream { "流式" } else { "非流式" };
+        let api_type = if is_stream { "streaming" } else { "non-streaming" };
 
         for attempt in 0..max_retries {
-            // 获取调用上下文（绑定 index、credentials、token）
+            // Get call context (binds index, credentials, token)
             let ctx = match self.token_manager.acquire_context().await {
                 Ok(c) => c,
                 Err(e) => {
@@ -399,7 +399,7 @@ impl KiroProvider {
                 }
             };
 
-            // 发送请求
+            // Send request
             let response = match self
                 .client
                 .post(&url)
@@ -411,13 +411,13 @@ impl KiroProvider {
                 Ok(resp) => resp,
                 Err(e) => {
                     tracing::warn!(
-                        "API 请求发送失败（尝试 {}/{}）: {}",
+                        "API request failed to send (attempt {}/{}): {}",
                         attempt + 1,
                         max_retries,
                         e
                     );
-                    // 网络错误通常是上游/链路瞬态问题，不应导致"禁用凭据"或"切换凭据"
-                    // （否则一段时间网络抖动会把所有凭据都误禁用，需要重启才能恢复）
+                    // Network errors are usually upstream/link transient issues, should not cause "disable credential" or "switch credential"
+                    // (Otherwise network jitter would mistakenly disable all credentials, requiring restart to recover)
                     last_error = Some(e.into());
                     if attempt + 1 < max_retries {
                         sleep(Self::retry_delay(attempt)).await;
@@ -428,19 +428,19 @@ impl KiroProvider {
 
             let status = response.status();
 
-            // 成功响应
+            // Successful response
             if status.is_success() {
                 self.token_manager.report_success(ctx.id);
                 return Ok(response);
             }
 
-            // 失败响应：读取 body 用于日志/错误信息
+            // Failed response: read body for logging/error messages
             let body = response.text().await.unwrap_or_default();
 
-            // 402 Payment Required 且额度用尽：禁用凭据并故障转移
+            // 402 Payment Required with quota exhausted: disable credential and failover
             if status.as_u16() == 402 && Self::is_monthly_request_limit(&body) {
                 tracing::warn!(
-                    "API 请求失败（额度已用尽，禁用凭据并切换，尝试 {}/{}）: {} {}",
+                    "API request failed (quota exhausted, disabling credential and switching, attempt {}/{}): {} {}",
                     attempt + 1,
                     max_retries,
                     status,
@@ -450,7 +450,7 @@ impl KiroProvider {
                 let has_available = self.token_manager.report_quota_exhausted(ctx.id);
                 if !has_available {
                     anyhow::bail!(
-                        "{} API 请求失败（所有凭据已用尽）: {} {}",
+                        "{} API request failed (all credentials exhausted): {} {}",
                         api_type,
                         status,
                         body
@@ -458,7 +458,7 @@ impl KiroProvider {
                 }
 
                 last_error = Some(anyhow::anyhow!(
-                    "{} API 请求失败: {} {}",
+                    "{} API request failed: {} {}",
                     api_type,
                     status,
                     body
@@ -466,15 +466,15 @@ impl KiroProvider {
                 continue;
             }
 
-            // 400 Bad Request - 请求问题，重试/切换凭据无意义
+            // 400 Bad Request - request issue, retry/switch credential is meaningless
             if status.as_u16() == 400 {
-                anyhow::bail!("{} API 请求失败: {} {}", api_type, status, body);
+                anyhow::bail!("{} API request failed: {} {}", api_type, status, body);
             }
 
-            // 401/403 - 更可能是凭据/权限问题：计入失败并允许故障转移
+            // 401/403 - more likely credential/permission issue: count as failure and allow failover
             if matches!(status.as_u16(), 401 | 403) {
                 tracing::warn!(
-                    "API 请求失败（可能为凭据错误，尝试 {}/{}）: {} {}",
+                    "API request failed (possibly credential error, attempt {}/{}): {} {}",
                     attempt + 1,
                     max_retries,
                     status,
@@ -484,7 +484,7 @@ impl KiroProvider {
                 let has_available = self.token_manager.report_failure(ctx.id);
                 if !has_available {
                     anyhow::bail!(
-                        "{} API 请求失败（所有凭据已用尽）: {} {}",
+                        "{} API request failed (all credentials exhausted): {} {}",
                         api_type,
                         status,
                         body
@@ -492,7 +492,7 @@ impl KiroProvider {
                 }
 
                 last_error = Some(anyhow::anyhow!(
-                    "{} API 请求失败: {} {}",
+                    "{} API request failed: {} {}",
                     api_type,
                     status,
                     body
@@ -500,18 +500,18 @@ impl KiroProvider {
                 continue;
             }
 
-            // 429/408/5xx - 瞬态上游错误：重试但不禁用或切换凭据
-            // （避免 429 high traffic / 502 high load 等瞬态错误把所有凭据锁死）
+            // 429/408/5xx - transient upstream error: retry but don't disable or switch credentials
+            // (To avoid 429 high traffic / 502 high load transient errors locking all credentials)
             if matches!(status.as_u16(), 408 | 429) || status.is_server_error() {
                 tracing::warn!(
-                    "API 请求失败（上游瞬态错误，尝试 {}/{}）: {} {}",
+                    "API request failed (upstream transient error, attempt {}/{}): {} {}",
                     attempt + 1,
                     max_retries,
                     status,
                     body
                 );
                 last_error = Some(anyhow::anyhow!(
-                    "{} API 请求失败: {} {}",
+                    "{} API request failed: {} {}",
                     api_type,
                     status,
                     body
@@ -522,21 +522,21 @@ impl KiroProvider {
                 continue;
             }
 
-            // 其他 4xx - 通常为请求/配置问题：直接返回，不计入凭据失败
+            // Other 4xx - usually request/configuration issue: return directly, don't count as credential failure
             if status.is_client_error() {
-                anyhow::bail!("{} API 请求失败: {} {}", api_type, status, body);
+                anyhow::bail!("{} API request failed: {} {}", api_type, status, body);
             }
 
-            // 兜底：当作可重试的瞬态错误处理（不切换凭据）
+            // Fallback: treat as retryable transient error (don't switch credentials)
             tracing::warn!(
-                "API 请求失败（未知错误，尝试 {}/{}）: {} {}",
+                "API request failed (unknown error, attempt {}/{}): {} {}",
                 attempt + 1,
                 max_retries,
                 status,
                 body
             );
             last_error = Some(anyhow::anyhow!(
-                "{} API 请求失败: {} {}",
+                "{} API request failed: {} {}",
                 api_type,
                 status,
                 body
@@ -546,10 +546,10 @@ impl KiroProvider {
             }
         }
 
-        // 所有重试都失败
+        // All retries failed
         Err(last_error.unwrap_or_else(|| {
             anyhow::anyhow!(
-                "{} API 请求失败：已达到最大重试次数（{}次）",
+                "{} API request failed: reached maximum retry count ({} times)",
                 api_type,
                 max_retries
             )
@@ -557,7 +557,7 @@ impl KiroProvider {
     }
 
     fn retry_delay(attempt: usize) -> Duration {
-        // 指数退避 + 少量抖动，避免上游抖动时放大故障
+        // Exponential backoff + small jitter to avoid amplifying failures during upstream jitter
         const BASE_MS: u64 = 200;
         const MAX_MS: u64 = 2_000;
         let exp = BASE_MS.saturating_mul(2u64.saturating_pow(attempt.min(6) as u32));
