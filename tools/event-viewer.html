@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -335,18 +335,18 @@
         <h1>AWS Event Stream Viewer</h1>
 
         <div class="input-section">
-            <label>粘贴二进制数据（支持 Hex / Base64 格式）</label>
+            <label>Paste binary data (supports Hex / Base64 format)</label>
             <div class="input-controls">
                 <select id="inputFormat" class="format-select">
-                    <option value="auto">自动检测</option>
+                    <option value="auto">Auto detect</option>
                     <option value="hex">Hex</option>
                     <option value="base64">Base64</option>
                 </select>
-                <button class="btn btn-primary" onclick="parseInput()">解析</button>
-                <button class="btn btn-secondary" onclick="clearAll()">清空</button>
-                <button class="btn btn-secondary" onclick="loadExample()">加载示例</button>
+                <button class="btn btn-primary" onclick="parseInput()">Parse</button>
+                <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+                <button class="btn btn-secondary" onclick="loadExample()">Load Example</button>
             </div>
-            <textarea id="inputData" placeholder="粘贴 Hex 数据 (如: 00 00 00 3e 00 00 00 1d...) 或 Base64 编码数据..."></textarea>
+            <textarea id="inputData" placeholder="Paste Hex data (e.g.: 00 00 00 3e 00 00 00 1d...) or Base64 encoded data..."></textarea>
         </div>
 
         <div id="error" class="error-box" style="display: none;"></div>
@@ -357,13 +357,13 @@
         </div>
 
         <div class="raw-section" id="rawSection" style="display: none;">
-            <h3>原始字节数据 <button class="btn btn-secondary copy-btn" onclick="copyRawHex()">复制 Hex</button></h3>
+            <h3>Raw Byte Data <button class="btn btn-secondary copy-btn" onclick="copyRawHex()">Copy Hex</button></h3>
             <div class="payload-hex" id="rawHex"></div>
         </div>
     </div>
 
     <script>
-        // CRC32 (IEEE/ISO-HDLC) 实现
+        // CRC32 (IEEE/ISO-HDLC) implementation
         const CRC32_TABLE = (() => {
             const table = new Uint32Array(256);
             for (let i = 0; i < 256; i++) {
@@ -384,7 +384,7 @@
             return (crc ^ 0xFFFFFFFF) >>> 0;
         }
 
-        // 值类型定义
+        // Value type definitions
         const VALUE_TYPES = {
             0: { name: 'BoolTrue', size: 0 },
             1: { name: 'BoolFalse', size: 0 },
@@ -398,20 +398,20 @@
             9: { name: 'UUID', size: 16 }
         };
 
-        // 输入格式检测
+        // Input format detection
         function detectFormat(input) {
             const cleaned = input.replace(/[\s\n\r]/g, '');
 
-            // 检测是否是Base64
+            // Check if it's Base64
             if (/^[A-Za-z0-9+/]+=*$/.test(cleaned) && cleaned.length % 4 === 0) {
-                // 尝试解码验证
+                // Try to decode and validate
                 try {
                     atob(cleaned);
                     return 'base64';
                 } catch {}
             }
 
-            // 检测是否是Hex
+            // Check if it's Hex
             if (/^[0-9A-Fa-f\s]+$/.test(input)) {
                 return 'hex';
             }
@@ -419,7 +419,7 @@
             return 'unknown';
         }
 
-        // 解析输入数据为字节数组
+        // Parse input data to byte array
         function parseInputData(input, format) {
             const cleaned = input.trim();
 
@@ -432,14 +432,14 @@
                     const binary = atob(cleaned.replace(/[\s\n\r]/g, ''));
                     return new Uint8Array([...binary].map(c => c.charCodeAt(0)));
                 } catch (e) {
-                    throw new Error('Base64 解码失败: ' + e.message);
+                    throw new Error('Base64 decode failed: ' + e.message);
                 }
             }
 
             if (format === 'hex') {
                 const hex = cleaned.replace(/[\s\n\r]/g, '').replace(/0x/gi, '');
                 if (hex.length % 2 !== 0) {
-                    throw new Error('Hex 数据长度必须是偶数');
+                    throw new Error('Hex data length must be even');
                 }
                 const bytes = new Uint8Array(hex.length / 2);
                 for (let i = 0; i < hex.length; i += 2) {
@@ -448,10 +448,10 @@
                 return bytes;
             }
 
-            throw new Error('无法识别输入格式');
+            throw new Error('Unable to recognize input format');
         }
 
-        // 读取大端序整数
+        // Read big-endian integers
         function readUint32BE(data, offset) {
             return (data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3]) >>> 0;
         }
@@ -467,13 +467,13 @@
             return BigInt(high) << 32n | BigInt(low);
         }
 
-        // 解析头部
+        // Parse headers
         function parseHeaders(data, headerLength) {
             const headers = [];
             let offset = 0;
 
             while (offset < headerLength) {
-                // 读取名称长度
+                // Read name length
                 const nameLength = data[offset];
                 offset++;
 
@@ -481,13 +481,13 @@
                     break;
                 }
 
-                // 读取名称
+                // Read name
                 const name = new TextDecoder().decode(data.slice(offset, offset + nameLength));
                 offset += nameLength;
 
                 if (offset >= headerLength) break;
 
-                // 读取值类型
+                // Read value type
                 const valueType = data[offset];
                 offset++;
 
@@ -495,7 +495,7 @@
                 let value;
                 let valueSize = typeInfo.size;
 
-                // 解析值
+                // Parse value
                 switch (valueType) {
                     case 0: // BoolTrue
                         value = true;
@@ -551,7 +551,7 @@
             return headers;
         }
 
-        // 解析单个消息帧
+        // Parse single message frame
         function parseFrame(data, offset) {
             if (data.length - offset < 16) {
                 return null;
@@ -562,33 +562,33 @@
             const preludeCrc = readUint32BE(data, offset + 8);
 
             if (totalLength < 16 || totalLength > 16 * 1024 * 1024) {
-                throw new Error(`消息长度异常: ${totalLength}`);
+                throw new Error(`Abnormal message length: ${totalLength}`);
             }
 
             if (data.length - offset < totalLength) {
                 return null;
             }
 
-            // 验证 Prelude CRC
+            // Validate Prelude CRC
             const actualPreludeCrc = crc32(data.slice(offset, offset + 8));
             const preludeCrcValid = preludeCrc === actualPreludeCrc;
 
-            // 验证 Message CRC
+            // Validate Message CRC
             const messageCrc = readUint32BE(data, offset + totalLength - 4);
             const actualMessageCrc = crc32(data.slice(offset, offset + totalLength - 4));
             const messageCrcValid = messageCrc === actualMessageCrc;
 
-            // 解析头部
+            // Parse headers
             const headersStart = offset + 12;
             const headersEnd = headersStart + headerLength;
             const headers = parseHeaders(data.slice(headersStart, headersEnd), headerLength);
 
-            // 提取 payload
+            // Extract payload
             const payloadStart = headersEnd;
             const payloadEnd = offset + totalLength - 4;
             const payload = data.slice(payloadStart, payloadEnd);
 
-            // 获取消息类型
+            // Get message type
             const messageType = headers.find(h => h.name === ':message-type')?.value || 'event';
             const eventType = headers.find(h => h.name === ':event-type')?.value || '';
             const contentType = headers.find(h => h.name === ':content-type')?.value || 'application/json';
@@ -607,7 +607,7 @@
             };
         }
 
-        // 解析所有消息
+        // Parse all messages
         function parseAllMessages(data) {
             const messages = [];
             let offset = 0;
@@ -622,7 +622,7 @@
                     offset += frame.totalLength;
                 } catch (e) {
                     console.error('Parse error at offset', offset, e);
-                    // 尝试跳过一个字节继续
+                    // Try to skip one byte and continue
                     offset++;
                 }
             }
@@ -630,7 +630,7 @@
             return messages;
         }
 
-        // 格式化 JSON 带语法高亮
+        // Format JSON with syntax highlighting
         function formatJson(obj, indent = 0) {
             const spaces = '  '.repeat(indent);
 
@@ -670,7 +670,7 @@
             return String(obj);
         }
 
-        // 格式化 Hex 视图
+        // Format Hex view
         function formatHexView(data) {
             const lines = [];
             for (let i = 0; i < data.length; i += 16) {
@@ -694,7 +694,7 @@
             return lines.join('\n');
         }
 
-        // 渲染单个消息
+        // Render single message
         function renderMessage(message, index) {
             const messageTypeClass = message.messageType === 'error' ? 'error' :
                                     message.messageType === 'exception' ? 'exception' : 'event';
@@ -735,7 +735,7 @@
                         </div>
                     </div>
                     <div class="message-content">
-                        <div class="section-title">CRC 校验</div>
+                        <div class="section-title">CRC Validation</div>
                         <table class="headers-table" style="margin-bottom: 16px;">
                             <tr><td>Prelude CRC</td><td>${crcStatus(message.preludeCrc)}</td></tr>
                             <tr><td>Message CRC</td><td>${crcStatus(message.messageCrc)}</td></tr>
@@ -783,7 +783,7 @@
             rawSection.style.display = 'none';
 
             if (!input.trim()) {
-                errorBox.textContent = '请输入数据';
+                errorBox.textContent = 'Please enter data';
                 errorBox.style.display = 'block';
                 return;
             }
@@ -792,19 +792,19 @@
                 const data = parseInputData(input, format);
                 parsedData = data;
 
-                // 显示原始 Hex
+                // Display raw Hex
                 document.getElementById('rawHex').innerHTML = formatHexView(data);
                 rawSection.style.display = 'block';
 
                 const messages = parseAllMessages(data);
 
                 if (messages.length === 0) {
-                    errorBox.textContent = '未能解析出任何消息。请检查输入数据格式。';
+                    errorBox.textContent = 'Unable to parse any messages. Please check the input data format.';
                     errorBox.style.display = 'block';
                     return;
                 }
 
-                // 统计
+                // Statistics
                 const eventTypes = {};
                 const messageTypes = {};
                 messages.forEach(m => {
@@ -816,19 +816,19 @@
 
                 document.getElementById('stats').innerHTML = `
                     <div class="stat-card">
-                        <div class="label">总消息数</div>
+                        <div class="label">Total Messages</div>
                         <div class="value">${messages.length}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="label">总字节数</div>
+                        <div class="label">Total Bytes</div>
                         <div class="value">${data.length}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="label">消息类型</div>
+                        <div class="label">Message Types</div>
                         <div class="value" style="font-size: 14px;">${Object.entries(messageTypes).map(([k, v]) => `${k}: ${v}`).join(', ')}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="label">事件类型</div>
+                        <div class="label">Event Types</div>
                         <div class="value" style="font-size: 14px;">${Object.entries(eventTypes).map(([k, v]) => `${k}: ${v}`).join(', ') || '-'}</div>
                     </div>
                 `;
@@ -837,7 +837,7 @@
                 resultsBox.style.display = 'block';
 
             } catch (e) {
-                errorBox.textContent = '解析错误: ' + e.message;
+                errorBox.textContent = 'Parse error: ' + e.message;
                 errorBox.style.display = 'block';
             }
         }
@@ -869,13 +869,13 @@
             if (!parsedData) return;
             const hex = Array.from(parsedData).map(b => b.toString(16).padStart(2, '0')).join(' ');
             navigator.clipboard.writeText(hex).then(() => {
-                alert('已复制到剪贴板');
+                alert('Copied to clipboard');
             });
         }
 
         function loadExample() {
-            // 构造一个示例事件流消息
-            // 这是一个简单的 assistantResponseEvent 消息
+            // Construct an example event stream message
+            // This is a simple assistantResponseEvent message
             const example = `
 00 00 00 8f 00 00 00 47 7d 83 6e 75 0d 3a 6d 65
 73 73 61 67 65 2d 74 79 70 65 07 00 05 65 76 65
