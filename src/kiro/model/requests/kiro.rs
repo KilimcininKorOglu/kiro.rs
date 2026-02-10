@@ -1,23 +1,23 @@
-//! Kiro 请求类型定义
+//! Kiro request type definitions
 //!
-//! 定义 Kiro API 的主请求结构
+//! Defines the main request structure for Kiro API
 
 use serde::{Deserialize, Serialize};
 
 use super::conversation::ConversationState;
 
-/// Kiro API 请求
+/// Kiro API request
 ///
-/// 用于构建发送给 Kiro API 的请求
+/// Used to build requests sent to Kiro API
 ///
-/// # 示例
+/// # Example
 ///
 /// ```rust
 /// use kiro_rs::kiro::model::requests::{
 ///     KiroRequest, ConversationState, CurrentMessage, UserInputMessage, Tool
 /// };
 ///
-/// // 创建简单请求
+/// // Create a simple request
 /// let state = ConversationState::new("conv-123")
 ///     .with_agent_task_type("vibe")
 ///     .with_current_message(CurrentMessage::new(
@@ -30,9 +30,9 @@ use super::conversation::ConversationState;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroRequest {
-    /// 对话状态
+    /// Conversation state
     pub conversation_state: ConversationState,
-    /// Profile ARN（可选）
+    /// Profile ARN (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_arn: Option<String>,
 }

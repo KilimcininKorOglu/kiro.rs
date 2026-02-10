@@ -1,13 +1,13 @@
-//! AWS Event Stream 头部解析
+//! AWS Event Stream header parsing
 //!
-//! 实现 AWS Event Stream 协议的头部解析功能
+//! Implements header parsing functionality for the AWS Event Stream protocol
 
 use super::error::{ParseError, ParseResult};
 use std::collections::HashMap;
 
-/// 头部值类型标识
+/// Header value type identifier
 ///
-/// AWS Event Stream 协议定义的 10 种值类型
+/// 10 value types defined by the AWS Event Stream protocol
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeaderValueType {
@@ -43,9 +43,9 @@ impl TryFrom<u8> for HeaderValueType {
     }
 }
 
-/// 头部值
+/// Header value
 ///
-/// 支持 AWS Event Stream 协议定义的所有值类型
+/// Supports all value types defined by the AWS Event Stream protocol
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeaderValue {
     Bool(bool),
@@ -60,7 +60,7 @@ pub enum HeaderValue {
 }
 
 impl HeaderValue {
-    /// 尝试获取字符串值
+    /// Try to get string value
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s),
@@ -69,66 +69,66 @@ impl HeaderValue {
     }
 }
 
-/// 消息头部集合
+/// Message header collection
 #[derive(Debug, Clone, Default)]
 pub struct Headers {
     inner: HashMap<String, HeaderValue>,
 }
 
 impl Headers {
-    /// 创建空的头部集合
+    /// Create empty header collection
     pub fn new() -> Self {
         Self {
             inner: HashMap::new(),
         }
     }
 
-    /// 插入头部
+    /// Insert header
     pub fn insert(&mut self, name: String, value: HeaderValue) {
         self.inner.insert(name, value);
     }
 
-    /// 获取头部值
+    /// Get header value
     pub fn get(&self, name: &str) -> Option<&HeaderValue> {
         self.inner.get(name)
     }
 
-    /// 获取字符串类型的头部值
+    /// Get string type header value
     pub fn get_string(&self, name: &str) -> Option<&str> {
         self.get(name).and_then(|v| v.as_str())
     }
 
-    /// 获取消息类型 (:message-type)
+    /// Get message type (:message-type)
     pub fn message_type(&self) -> Option<&str> {
         self.get_string(":message-type")
     }
 
-    /// 获取事件类型 (:event-type)
+    /// Get event type (:event-type)
     pub fn event_type(&self) -> Option<&str> {
         self.get_string(":event-type")
     }
 
-    /// 获取异常类型 (:exception-type)
+    /// Get exception type (:exception-type)
     pub fn exception_type(&self) -> Option<&str> {
         self.get_string(":exception-type")
     }
 
-    /// 获取错误代码 (:error-code)
+    /// Get error code (:error-code)
     pub fn error_code(&self) -> Option<&str> {
         self.get_string(":error-code")
     }
 }
 
-/// 从字节流解析头部
+/// Parse headers from byte stream
 ///
 /// # Arguments
-/// * `data` - 头部数据切片
-/// * `header_length` - 头部总长度
+/// * `data` - Header data slice
+/// * `header_length` - Total header length
 ///
 /// # Returns
-/// 解析后的 Headers 结构
+/// Parsed Headers structure
 pub fn parse_headers(data: &[u8], header_length: usize) -> ParseResult<Headers> {
-    // 验证数据长度是否足够
+    // Verify data length is sufficient
     if data.len() < header_length {
         return Err(ParseError::Incomplete {
             needed: header_length,
@@ -140,21 +140,21 @@ pub fn parse_headers(data: &[u8], header_length: usize) -> ParseResult<Headers> 
     let mut offset = 0;
 
     while offset < header_length {
-        // 读取头部名称长度 (1 byte)
+        // Read header name length (1 byte)
         if offset >= data.len() {
             break;
         }
         let name_len = data[offset] as usize;
         offset += 1;
 
-        // 验证名称长度
+        // Validate name length
         if name_len == 0 {
             return Err(ParseError::HeaderParseFailed(
-                "头部名称长度不能为 0".to_string(),
+                "Header name length cannot be 0".to_string(),
             ));
         }
 
-        // 读取头部名称
+        // Read header name
         if offset + name_len > data.len() {
             return Err(ParseError::Incomplete {
                 needed: name_len,
@@ -164,7 +164,7 @@ pub fn parse_headers(data: &[u8], header_length: usize) -> ParseResult<Headers> 
         let name = String::from_utf8_lossy(&data[offset..offset + name_len]).to_string();
         offset += name_len;
 
-        // 读取值类型 (1 byte)
+        // Read value type (1 byte)
         if offset >= data.len() {
             return Err(ParseError::Incomplete {
                 needed: 1,
@@ -174,7 +174,7 @@ pub fn parse_headers(data: &[u8], header_length: usize) -> ParseResult<Headers> 
         let value_type = HeaderValueType::try_from(data[offset])?;
         offset += 1;
 
-        // 根据类型解析值
+        // Parse value based on type
         let value = parse_header_value(&data[offset..], value_type, &mut offset)?;
         headers.insert(name, value);
     }
@@ -182,7 +182,7 @@ pub fn parse_headers(data: &[u8], header_length: usize) -> ParseResult<Headers> 
     Ok(headers)
 }
 
-/// 解析头部值
+/// Parse header value
 fn parse_header_value(
     data: &[u8],
     value_type: HeaderValueType,
@@ -256,7 +256,7 @@ fn parse_header_value(
     result
 }
 
-/// 确保有足够的字节
+/// Ensure sufficient bytes available
 fn ensure_bytes(data: &[u8], needed: usize) -> ParseResult<()> {
     if data.len() < needed {
         Err(ParseError::Incomplete {
@@ -306,10 +306,10 @@ mod tests {
 
     #[test]
     fn test_parse_headers_string() {
-        // 构造一个简单的头部: name_len(1) + name + type(7=string) + value_len(2) + value
-        // 头部名: "x" (长度 1)
-        // 值类型: 7 (String)
-        // 值: "ab" (长度 2)
+        // Construct a simple header: name_len(1) + name + type(7=string) + value_len(2) + value
+        // Header name: "x" (length 1)
+        // Value type: 7 (String)
+        // Value: "ab" (length 2)
         let data = [1u8, b'x', 7, 0, 2, b'a', b'b'];
         let headers = parse_headers(&data, data.len()).unwrap();
         assert_eq!(headers.get_string("x"), Some("ab"));

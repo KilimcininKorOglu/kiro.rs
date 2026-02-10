@@ -1,107 +1,107 @@
-//! Admin API 类型定义
+//! Admin API type definitions
 
 use serde::{Deserialize, Serialize};
 
-// ============ 凭据状态 ============
+// ============ Credential Status ============
 
-/// 所有凭据状态响应
+/// All credentials status response
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsStatusResponse {
-    /// 凭据总数
+    /// Total number of credentials
     pub total: usize,
-    /// 可用凭据数量（未禁用）
+    /// Number of available credentials (not disabled)
     pub available: usize,
-    /// 当前活跃凭据 ID
+    /// Current active credential ID
     pub current_id: u64,
-    /// 各凭据状态列表
+    /// List of credential statuses
     pub credentials: Vec<CredentialStatusItem>,
 }
 
-/// 单个凭据的状态信息
+/// Status information for a single credential
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialStatusItem {
-    /// 凭据唯一 ID
+    /// Credential unique ID
     pub id: u64,
-    /// 优先级（数字越小优先级越高）
+    /// Priority (lower number = higher priority)
     pub priority: u32,
-    /// 是否被禁用
+    /// Whether disabled
     pub disabled: bool,
-    /// 连续失败次数
+    /// Consecutive failure count
     pub failure_count: u32,
-    /// 是否为当前活跃凭据
+    /// Whether this is the current active credential
     pub is_current: bool,
-    /// Token 过期时间（RFC3339 格式）
+    /// Token expiration time (RFC3339 format)
     pub expires_at: Option<String>,
-    /// 认证方式
+    /// Authentication method
     pub auth_method: Option<String>,
-    /// 是否有 Profile ARN
+    /// Whether has Profile ARN
     pub has_profile_arn: bool,
-    /// refreshToken 的 SHA-256 哈希（用于前端重复检测）
+    /// SHA-256 hash of refreshToken (for frontend duplicate detection)
     pub refresh_token_hash: Option<String>,
-    /// 用户邮箱（用于前端显示）
+    /// User email (for frontend display)
     pub email: Option<String>,
-    /// API 调用成功次数
+    /// API call success count
     pub success_count: u64,
-    /// 最后一次 API 调用时间（RFC3339 格式）
+    /// Last API call time (RFC3339 format)
     pub last_used_at: Option<String>,
 }
 
-// ============ 操作请求 ============
+// ============ Operation Requests ============
 
-/// 启用/禁用凭据请求
+/// Enable/disable credential request
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetDisabledRequest {
-    /// 是否禁用
+    /// Whether to disable
     pub disabled: bool,
 }
 
-/// 修改优先级请求
+/// Modify priority request
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetPriorityRequest {
-    /// 新优先级值
+    /// New priority value
     pub priority: u32,
 }
 
-/// 添加凭据请求
+/// Add credential request
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddCredentialRequest {
-    /// 刷新令牌（必填）
+    /// Refresh token (required)
     pub refresh_token: String,
 
-    /// 认证方式（可选，默认 social）
+    /// Authentication method (optional, default social)
     #[serde(default = "default_auth_method")]
     pub auth_method: String,
 
-    /// OIDC Client ID（IdC 认证需要）
+    /// OIDC Client ID (required for IdC authentication)
     pub client_id: Option<String>,
 
-    /// OIDC Client Secret（IdC 认证需要）
+    /// OIDC Client Secret (required for IdC authentication)
     pub client_secret: Option<String>,
 
-    /// 优先级（可选，默认 0）
+    /// Priority (optional, default 0)
     #[serde(default)]
     pub priority: u32,
 
-    /// 凭据级 Region 配置（用于 OIDC token 刷新）
-    /// 未配置时回退到 config.json 的全局 region
+    /// Credential-level Region configuration (for OIDC token refresh)
+    /// Falls back to global region in config.json if not configured
     pub region: Option<String>,
 
-    /// 凭据级 Auth Region（用于 Token 刷新）
+    /// Credential-level Auth Region (for Token refresh)
     pub auth_region: Option<String>,
 
-    /// 凭据级 API Region（用于 API 请求）
+    /// Credential-level API Region (for API requests)
     pub api_region: Option<String>,
 
-    /// 凭据级 Machine ID（可选，64 位字符串）
-    /// 未配置时回退到 config.json 的 machineId
+    /// Credential-level Machine ID (optional, 64-character string)
+    /// Falls back to machineId in config.json if not configured
     pub machine_id: Option<String>,
 
-    /// 用户邮箱（可选，用于前端显示）
+    /// User email (optional, for frontend display)
     pub email: Option<String>,
 }
 
@@ -109,62 +109,62 @@ fn default_auth_method() -> String {
     "social".to_string()
 }
 
-/// 添加凭据成功响应
+/// Add credential success response
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddCredentialResponse {
     pub success: bool,
     pub message: String,
-    /// 新添加的凭据 ID
+    /// Newly added credential ID
     pub credential_id: u64,
-    /// 用户邮箱（如果获取成功）
+    /// User email (if successfully obtained)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 }
 
-// ============ 余额查询 ============
+// ============ Balance Query ============
 
-/// 余额查询响应
+/// Balance query response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BalanceResponse {
-    /// 凭据 ID
+    /// Credential ID
     pub id: u64,
-    /// 订阅类型
+    /// Subscription type
     pub subscription_title: Option<String>,
-    /// 当前使用量
+    /// Current usage
     pub current_usage: f64,
-    /// 使用限额
+    /// Usage limit
     pub usage_limit: f64,
-    /// 剩余额度
+    /// Remaining quota
     pub remaining: f64,
-    /// 使用百分比
+    /// Usage percentage
     pub usage_percentage: f64,
-    /// 下次重置时间（Unix 时间戳）
+    /// Next reset time (Unix timestamp)
     pub next_reset_at: Option<f64>,
 }
 
-// ============ 负载均衡配置 ============
+// ============ Load Balancing Configuration ============
 
-/// 负载均衡模式响应
+/// Load balancing mode response
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadBalancingModeResponse {
-    /// 当前模式（"priority" 或 "balanced"）
+    /// Current mode ("priority" or "balanced")
     pub mode: String,
 }
 
-/// 设置负载均衡模式请求
+/// Set load balancing mode request
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetLoadBalancingModeRequest {
-    /// 模式（"priority" 或 "balanced"）
+    /// Mode ("priority" or "balanced")
     pub mode: String,
 }
 
-// ============ 通用响应 ============
+// ============ Common Responses ============
 
-/// 操作成功响应
+/// Operation success response
 #[derive(Debug, Serialize)]
 pub struct SuccessResponse {
     pub success: bool,
@@ -180,7 +180,7 @@ impl SuccessResponse {
     }
 }
 
-/// 错误响应
+/// Error response
 #[derive(Debug, Serialize)]
 pub struct AdminErrorResponse {
     pub error: AdminError,

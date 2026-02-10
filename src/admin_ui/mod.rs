@@ -1,6 +1,6 @@
-//! Admin UI 静态文件服务模块
+//! Admin UI static file service module
 //!
-//! 使用 rust-embed 嵌入前端构建产物
+//! Uses rust-embed to embed frontend build artifacts
 
 mod router;
 

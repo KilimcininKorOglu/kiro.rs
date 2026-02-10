@@ -1,4 +1,4 @@
-//! Admin API 业务逻辑服务
+//! Admin API business logic service
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,21 +17,21 @@ use super::types::{
     CredentialsStatusResponse, LoadBalancingModeResponse, SetLoadBalancingModeRequest,
 };
 
-/// 余额缓存过期时间（秒），5 分钟
+/// Balance cache expiration time (seconds), 5 minutes
 const BALANCE_CACHE_TTL_SECS: i64 = 300;
 
-/// 缓存的余额条目（含时间戳）
+/// Cached balance entry (with timestamp)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CachedBalance {
-    /// 缓存时间（Unix 秒）
+    /// Cache time (Unix seconds)
     cached_at: f64,
-    /// 缓存的余额数据
+    /// Cached balance data
     data: BalanceResponse,
 }
 
-/// Admin 服务
+/// Admin service
 ///
-/// 封装所有 Admin API 的业务逻辑
+/// Encapsulates all Admin API business logic
 pub struct AdminService {
     token_manager: Arc<MultiTokenManager>,
     balance_cache: Mutex<HashMap<u64, CachedBalance>>,
@@ -53,7 +53,7 @@ impl AdminService {
         }
     }
 
-    /// 获取所有凭据状态
+    /// Get all credential statuses
     pub fn get_all_credentials(&self) -> CredentialsStatusResponse {
         let snapshot = self.token_manager.snapshot();
 
@@ -76,7 +76,7 @@ impl AdminService {
             })
             .collect();
 
-        // 按优先级排序（数字越小优先级越高）
+        // Sort by priority (lower number = higher priority)
         credentials.sort_by_key(|c| c.priority);
 
         CredentialsStatusResponse {
@@ -87,9 +87,9 @@ impl AdminService {
         }
     }
 
-    /// 设置凭据禁用状态
+    /// Set credential disabled status
     pub fn set_disabled(&self, id: u64, disabled: bool) -> Result<(), AdminServiceError> {
-        // 先获取当前凭据 ID，用于判断是否需要切换
+        // First get current credential ID to determine if switch is needed
         let snapshot = self.token_manager.snapshot();
         let current_id = snapshot.current_id;
 
@@ -97,45 +97,45 @@ impl AdminService {
             .set_disabled(id, disabled)
             .map_err(|e| self.classify_error(e, id))?;
 
-        // 只有禁用的是当前凭据时才尝试切换到下一个
+        // Only try to switch to next when disabling the current credential
         if disabled && id == current_id {
             let _ = self.token_manager.switch_to_next();
         }
         Ok(())
     }
 
-    /// 设置凭据优先级
+    /// Set credential priority
     pub fn set_priority(&self, id: u64, priority: u32) -> Result<(), AdminServiceError> {
         self.token_manager
             .set_priority(id, priority)
             .map_err(|e| self.classify_error(e, id))
     }
 
-    /// 重置失败计数并重新启用
+    /// Reset failure count and re-enable
     pub fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
             .reset_and_enable(id)
             .map_err(|e| self.classify_error(e, id))
     }
 
-    /// 获取凭据余额（带缓存）
+    /// Get credential balance (with cache)
     pub async fn get_balance(&self, id: u64) -> Result<BalanceResponse, AdminServiceError> {
-        // 先查缓存
+        // Check cache first
         {
             let cache = self.balance_cache.lock();
             if let Some(cached) = cache.get(&id) {
                 let now = Utc::now().timestamp() as f64;
                 if (now - cached.cached_at) < BALANCE_CACHE_TTL_SECS as f64 {
-                    tracing::debug!("凭据 #{} 余额命中缓存", id);
+                    tracing::debug!("Credential #{} balance cache hit", id);
                     return Ok(cached.data.clone());
                 }
             }
         }
 
-        // 缓存未命中或已过期，从上游获取
+        // Cache miss or expired, fetch from upstream
         let balance = self.fetch_balance(id).await?;
 
-        // 更新缓存
+        // Update cache
         {
             let mut cache = self.balance_cache.lock();
             cache.insert(
@@ -151,7 +151,7 @@ impl AdminService {
         Ok(balance)
     }
 
-    /// 从上游获取余额（无缓存）
+    /// Fetch balance from upstream (no cache)
     async fn fetch_balance(&self, id: u64) -> Result<BalanceResponse, AdminServiceError> {
         let usage = self
             .token_manager
@@ -179,12 +179,12 @@ impl AdminService {
         })
     }
 
-    /// 添加新凭据
+    /// Add new credential
     pub async fn add_credential(
         &self,
         req: AddCredentialRequest,
     ) -> Result<AddCredentialResponse, AdminServiceError> {
-        // 构建凭据对象
+        // Build credential object
         let email = req.email.clone();
         let new_cred = KiroCredentials {
             id: None,
@@ -203,7 +203,7 @@ impl AdminService {
             email: req.email,
         };
 
-        // 调用 token_manager 添加凭据
+        // Call token_manager to add credential
         let credential_id = self
             .token_manager
             .add_credential(new_cred)
@@ -212,19 +212,19 @@ impl AdminService {
 
         Ok(AddCredentialResponse {
             success: true,
-            message: format!("凭据添加成功，ID: {}", credential_id),
+            message: format!("Credential added successfully, ID: {}", credential_id),
             credential_id,
             email,
         })
     }
 
-    /// 删除凭据
+    /// Delete credential
     pub fn delete_credential(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
             .delete_credential(id)
             .map_err(|e| self.classify_delete_error(e, id))?;
 
-        // 清理已删除凭据的余额缓存
+        // Clean up balance cache for deleted credential
         {
             let mut cache = self.balance_cache.lock();
             cache.remove(&id);
@@ -234,22 +234,22 @@ impl AdminService {
         Ok(())
     }
 
-    /// 获取负载均衡模式
+    /// Get load balancing mode
     pub fn get_load_balancing_mode(&self) -> LoadBalancingModeResponse {
         LoadBalancingModeResponse {
             mode: self.token_manager.get_load_balancing_mode(),
         }
     }
 
-    /// 设置负载均衡模式
+    /// Set load balancing mode
     pub fn set_load_balancing_mode(
         &self,
         req: SetLoadBalancingModeRequest,
     ) -> Result<LoadBalancingModeResponse, AdminServiceError> {
-        // 验证模式值
+        // Validate mode value
         if req.mode != "priority" && req.mode != "balanced" {
             return Err(AdminServiceError::InvalidCredential(
-                "mode 必须是 'priority' 或 'balanced'".to_string(),
+                "mode must be 'priority' or 'balanced'".to_string(),
             ));
         }
 
@@ -260,7 +260,7 @@ impl AdminService {
         Ok(LoadBalancingModeResponse { mode: req.mode })
     }
 
-    // ============ 余额缓存持久化 ============
+    // ============ Balance cache persistence ============
 
     fn load_balance_cache_from(cache_path: &Option<PathBuf>) -> HashMap<u64, CachedBalance> {
         let path = match cache_path {
@@ -273,11 +273,11 @@ impl AdminService {
             Err(_) => return HashMap::new(),
         };
 
-        // 文件中使用字符串 key 以兼容 JSON 格式
+        // File uses string keys for JSON format compatibility
         let map: HashMap<String, CachedBalance> = match serde_json::from_str(&content) {
             Ok(m) => m,
             Err(e) => {
-                tracing::warn!("解析余额缓存失败，将忽略: {}", e);
+                tracing::warn!("Failed to parse balance cache, ignoring: {}", e);
                 return HashMap::new();
             }
         };
@@ -286,7 +286,7 @@ impl AdminService {
         map.into_iter()
             .filter_map(|(k, v)| {
                 let id = k.parse::<u64>().ok()?;
-                // 丢弃超过 TTL 的条目
+                // Discard entries exceeding TTL
                 if (now - v.cached_at) < BALANCE_CACHE_TTL_SECS as f64 {
                     Some((id, v))
                 } else {
@@ -302,7 +302,7 @@ impl AdminService {
             None => return,
         };
 
-        // 持有锁期间完成序列化和写入，防止并发损坏
+        // Hold lock during serialization and write to prevent concurrent corruption
         let cache = self.balance_cache.lock();
         let map: HashMap<String, &CachedBalance> =
             cache.iter().map(|(k, v)| (k.to_string(), v)).collect();
@@ -310,44 +310,44 @@ impl AdminService {
         match serde_json::to_string_pretty(&map) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(path, json) {
-                    tracing::warn!("保存余额缓存失败: {}", e);
+                    tracing::warn!("Failed to save balance cache: {}", e);
                 }
             }
-            Err(e) => tracing::warn!("序列化余额缓存失败: {}", e),
+            Err(e) => tracing::warn!("Failed to serialize balance cache: {}", e),
         }
     }
 
-    // ============ 错误分类 ============
+    // ============ Error classification ============
 
-    /// 分类简单操作错误（set_disabled, set_priority, reset_and_enable）
+    /// Classify simple operation errors (set_disabled, set_priority, reset_and_enable)
     fn classify_error(&self, e: anyhow::Error, id: u64) -> AdminServiceError {
         let msg = e.to_string();
-        if msg.contains("不存在") {
+        if msg.contains("not found") || msg.contains("does not exist") {
             AdminServiceError::NotFound { id }
         } else {
             AdminServiceError::InternalError(msg)
         }
     }
 
-    /// 分类余额查询错误（可能涉及上游 API 调用）
+    /// Classify balance query errors (may involve upstream API calls)
     fn classify_balance_error(&self, e: anyhow::Error, id: u64) -> AdminServiceError {
         let msg = e.to_string();
 
-        // 1. 凭据不存在
-        if msg.contains("不存在") {
+        // 1. Credential not found
+        if msg.contains("not found") || msg.contains("does not exist") {
             return AdminServiceError::NotFound { id };
         }
 
-        // 2. 上游服务错误特征：HTTP 响应错误或网络错误
+        // 2. Upstream service error characteristics: HTTP response errors or network errors
         let is_upstream_error =
-            // HTTP 响应错误（来自 refresh_*_token 的错误消息）
-            msg.contains("凭证已过期或无效") ||
-            msg.contains("权限不足") ||
-            msg.contains("已被限流") ||
-            msg.contains("服务器错误") ||
-            msg.contains("Token 刷新失败") ||
-            msg.contains("暂时不可用") ||
-            // 网络错误（reqwest 错误）
+            // HTTP response errors (from refresh_*_token error messages)
+            msg.contains("credential expired or invalid") ||
+            msg.contains("insufficient permissions") ||
+            msg.contains("rate limited") ||
+            msg.contains("server error") ||
+            msg.contains("Token refresh failed") ||
+            msg.contains("temporarily unavailable") ||
+            // Network errors (reqwest errors)
             msg.contains("error trying to connect") ||
             msg.contains("connection") ||
             msg.contains("timeout") ||
@@ -356,25 +356,25 @@ impl AdminService {
         if is_upstream_error {
             AdminServiceError::UpstreamError(msg)
         } else {
-            // 3. 默认归类为内部错误（本地验证失败、配置错误等）
-            // 包括：缺少 refreshToken、refreshToken 已被截断、无法生成 machineId 等
+            // 3. Default to internal error (local validation failure, configuration error, etc.)
+            // Includes: missing refreshToken, truncated refreshToken, unable to generate machineId, etc.
             AdminServiceError::InternalError(msg)
         }
     }
 
-    /// 分类添加凭据错误
+    /// Classify add credential errors
     fn classify_add_error(&self, e: anyhow::Error) -> AdminServiceError {
         let msg = e.to_string();
 
-        // 凭据验证失败（refreshToken 无效、格式错误等）
-        let is_invalid_credential = msg.contains("缺少 refreshToken")
-            || msg.contains("refreshToken 为空")
-            || msg.contains("refreshToken 已被截断")
-            || msg.contains("凭据已存在")
-            || msg.contains("refreshToken 重复")
-            || msg.contains("凭证已过期或无效")
-            || msg.contains("权限不足")
-            || msg.contains("已被限流");
+        // Credential validation failure (invalid refreshToken, format error, etc.)
+        let is_invalid_credential = msg.contains("missing refreshToken")
+            || msg.contains("refreshToken is empty")
+            || msg.contains("refreshToken has been truncated")
+            || msg.contains("credential already exists")
+            || msg.contains("duplicate refreshToken")
+            || msg.contains("credential expired or invalid")
+            || msg.contains("insufficient permissions")
+            || msg.contains("rate limited");
 
         if is_invalid_credential {
             AdminServiceError::InvalidCredential(msg)
@@ -388,12 +388,12 @@ impl AdminService {
         }
     }
 
-    /// 分类删除凭据错误
+    /// Classify delete credential errors
     fn classify_delete_error(&self, e: anyhow::Error, id: u64) -> AdminServiceError {
         let msg = e.to_string();
-        if msg.contains("不存在") {
+        if msg.contains("not found") || msg.contains("does not exist") {
             AdminServiceError::NotFound { id }
-        } else if msg.contains("只能删除已禁用的凭据") || msg.contains("请先禁用凭据") {
+        } else if msg.contains("can only delete disabled credentials") || msg.contains("please disable the credential first") {
             AdminServiceError::InvalidCredential(msg)
         } else {
             AdminServiceError::InternalError(msg)

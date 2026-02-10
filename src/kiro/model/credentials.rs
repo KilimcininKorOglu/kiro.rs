@@ -1,7 +1,7 @@
-//! Kiro OAuth 凭证数据模型
+//! Kiro OAuth credentials data model
 //!
-//! 支持从 Kiro IDE 的凭证文件加载，使用 Social 认证方式
-//! 支持单凭据和多凭据配置格式
+//! Supports loading from Kiro IDE credential files using Social authentication
+//! Supports single credential and multi-credential configuration formats
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -9,19 +9,19 @@ use std::path::Path;
 
 use crate::model::config::Config;
 
-/// Kiro OAuth 凭证
+/// Kiro OAuth credentials
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroCredentials {
-    /// 凭据唯一标识符（自增 ID）
+    /// Credential unique identifier (auto-increment ID)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
 
-    /// 访问令牌
+    /// Access token
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
 
-    /// 刷新令牌
+    /// Refresh token
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
 
@@ -29,51 +29,51 @@ pub struct KiroCredentials {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_arn: Option<String>,
 
-    /// 过期时间 (RFC3339 格式)
+    /// Expiration time (RFC3339 format)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
 
-    /// 认证方式 (social / idc)
+    /// Authentication method (social / idc)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
 
-    /// OIDC Client ID (IdC 认证需要)
+    /// OIDC Client ID (required for IdC authentication)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
 
-    /// OIDC Client Secret (IdC 认证需要)
+    /// OIDC Client Secret (required for IdC authentication)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
 
-    /// 凭据优先级（数字越小优先级越高，默认为 0）
+    /// Credential priority (lower number = higher priority, default is 0)
     #[serde(default)]
     #[serde(skip_serializing_if = "is_zero")]
     pub priority: u32,
 
-    /// 凭据级 Region 配置（用于 OIDC token 刷新）
-    /// 未配置时回退到 config.json 的全局 region
+    /// Credential-level Region configuration (for OIDC token refresh)
+    /// Falls back to global region in config.json if not configured
     #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
 
-    /// 凭据级 Auth Region（用于 Token 刷新）
+    /// Credential-level Auth Region (for Token refresh)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_region: Option<String>,
 
-    /// 凭据级 API Region（用于 API 请求）
+    /// Credential-level API Region (for API requests)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_region: Option<String>,
 
-    /// 凭据级 Machine ID 配置（可选）
-    /// 未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生
+    /// Credential-level Machine ID configuration (optional)
+    /// Falls back to machineId in config.json if not configured; derived from refreshToken if neither is configured
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine_id: Option<String>,
 
-    /// 用户邮箱（从 Anthropic API 获取）
+    /// User email (obtained from Anthropic API)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 }
 
-/// 判断是否为零（用于跳过序列化）
+/// Check if value is zero (for skipping serialization)
 fn is_zero(value: &u32) -> bool {
     *value == 0
 }
@@ -86,37 +86,37 @@ fn canonicalize_auth_method_value(value: &str) -> &str {
     }
 }
 
-/// 凭据配置（支持单对象或数组格式）
+/// Credentials configuration (supports single object or array format)
 ///
-/// 自动识别配置文件格式：
-/// - 单对象格式（旧格式，向后兼容）
-/// - 数组格式（新格式，支持多凭据）
+/// Automatically detects configuration file format:
+/// - Single object format (legacy format, backward compatible)
+/// - Array format (new format, supports multiple credentials)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CredentialsConfig {
-    /// 单个凭据（旧格式）
+    /// Single credential (legacy format)
     Single(KiroCredentials),
-    /// 多凭据数组（新格式）
+    /// Multiple credentials array (new format)
     Multiple(Vec<KiroCredentials>),
 }
 
 impl CredentialsConfig {
-    /// 从文件加载凭据配置
+    /// Load credentials configuration from file
     ///
-    /// - 如果文件不存在，返回空数组
-    /// - 如果文件内容为空，返回空数组
-    /// - 支持单对象或数组格式
+    /// - Returns empty array if file does not exist
+    /// - Returns empty array if file content is empty
+    /// - Supports single object or array format
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
 
-        // 文件不存在时返回空数组
+        // Return empty array if file does not exist
         if !path.exists() {
             return Ok(CredentialsConfig::Multiple(vec![]));
         }
 
         let content = fs::read_to_string(path)?;
 
-        // 文件为空时返回空数组
+        // Return empty array if file is empty
         if content.trim().is_empty() {
             return Ok(CredentialsConfig::Multiple(vec![]));
         }
@@ -125,7 +125,7 @@ impl CredentialsConfig {
         Ok(config)
     }
 
-    /// 转换为按优先级排序的凭据列表
+    /// Convert to credentials list sorted by priority
     pub fn into_sorted_credentials(self) -> Vec<KiroCredentials> {
         match self {
             CredentialsConfig::Single(mut cred) => {
@@ -133,7 +133,7 @@ impl CredentialsConfig {
                 vec![cred]
             }
             CredentialsConfig::Multiple(mut creds) => {
-                // 按优先级排序（数字越小优先级越高）
+                // Sort by priority (lower number = higher priority)
                 creds.sort_by_key(|c| c.priority);
                 for cred in &mut creds {
                     cred.canonicalize_auth_method();
@@ -143,7 +143,7 @@ impl CredentialsConfig {
         }
     }
 
-    /// 获取凭据数量
+    /// Get credentials count
     pub fn len(&self) -> usize {
         match self {
             CredentialsConfig::Single(_) => 1,
@@ -151,7 +151,7 @@ impl CredentialsConfig {
         }
     }
 
-    /// 判断是否为空
+    /// Check if empty
     pub fn is_empty(&self) -> bool {
         match self {
             CredentialsConfig::Single(_) => false,
@@ -159,20 +159,20 @@ impl CredentialsConfig {
         }
     }
 
-    /// 判断是否为多凭据格式（数组格式）
+    /// Check if multiple credentials format (array format)
     pub fn is_multiple(&self) -> bool {
         matches!(self, CredentialsConfig::Multiple(_))
     }
 }
 
 impl KiroCredentials {
-    /// 获取默认凭证文件路径
+    /// Get default credentials file path
     pub fn default_credentials_path() -> &'static str {
         "credentials.json"
     }
 
-    /// 获取有效的 Auth Region（用于 Token 刷新）
-    /// 优先级：凭据.auth_region > 凭据.region > config.auth_region > config.region
+    /// Get effective Auth Region (for Token refresh)
+    /// Priority: credential.auth_region > credential.region > config.auth_region > config.region
     pub fn effective_auth_region<'a>(&'a self, config: &'a Config) -> &'a str {
         self.auth_region
             .as_deref()
@@ -180,30 +180,30 @@ impl KiroCredentials {
             .unwrap_or(config.effective_auth_region())
     }
 
-    /// 获取有效的 API Region（用于 API 请求）
-    /// 优先级：凭据.api_region > config.api_region > config.region
+    /// Get effective API Region (for API requests)
+    /// Priority: credential.api_region > config.api_region > config.region
     pub fn effective_api_region<'a>(&'a self, config: &'a Config) -> &'a str {
         self.api_region
             .as_deref()
             .unwrap_or(config.effective_api_region())
     }
 
-    /// 从 JSON 字符串解析凭证
+    /// Parse credentials from JSON string
     pub fn from_json(json_string: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_string)
     }
 
-    /// 从文件加载凭证
+    /// Load credentials from file
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let content = fs::read_to_string(path.as_ref())?;
         if content.is_empty() {
-            anyhow::bail!("凭证文件为空: {:?}", path.as_ref());
+            anyhow::bail!("Credentials file is empty: {:?}", path.as_ref());
         }
         let credentials = Self::from_json(&content)?;
         Ok(credentials)
     }
 
-    /// 序列化为格式化的 JSON 字符串
+    /// Serialize to formatted JSON string
     pub fn to_pretty_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
@@ -278,7 +278,7 @@ mod tests {
         assert!(json.contains("accessToken"));
         assert!(json.contains("authMethod"));
         assert!(!json.contains("refreshToken"));
-        // priority 为 0 时不序列化
+        // priority is 0, should not be serialized
         assert!(!json.contains("priority"));
     }
 
@@ -333,17 +333,17 @@ mod tests {
         let config: CredentialsConfig = serde_json::from_str(json).unwrap();
         let list = config.into_sorted_credentials();
 
-        // 验证按优先级排序
+        // Verify sorted by priority
         assert_eq!(list[0].refresh_token, Some("t2".to_string())); // priority 0
         assert_eq!(list[1].refresh_token, Some("t3".to_string())); // priority 1
         assert_eq!(list[2].refresh_token, Some("t1".to_string())); // priority 2
     }
 
-    // ============ Region 字段测试 ============
+    // ============ Region field tests ============
 
     #[test]
     fn test_region_field_parsing() {
-        // 测试解析包含 region 字段的 JSON
+        // Test parsing JSON with region field
         let json = r#"{
             "refreshToken": "test_refresh",
             "region": "us-east-1"
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_region_field_missing_backward_compat() {
-        // 测试向后兼容：不包含 region 字段的旧格式 JSON
+        // Test backward compatibility: legacy JSON format without region field
         let json = r#"{
             "refreshToken": "test_refresh",
             "authMethod": "social"
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_region_field_serialization() {
-        // 测试序列化时正确输出 region 字段
+        // Test correct output of region field during serialization
         let creds = KiroCredentials {
             id: None,
             access_token: None,
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_region_field_none_not_serialized() {
-        // 测试 region 为 None 时不序列化
+        // Test region is not serialized when None
         let creds = KiroCredentials {
             id: None,
             access_token: None,
@@ -416,7 +416,7 @@ mod tests {
         assert!(!json.contains("region"));
     }
 
-    // ============ MachineId 字段测试 ============
+    // ============ MachineId field tests ============
 
     #[test]
     fn test_machine_id_field_parsing() {
@@ -455,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_multiple_credentials_with_different_regions() {
-        // 测试多凭据场景下不同凭据使用各自的 region
+        // Test multiple credentials scenario where each credential uses its own region
         let json = r#"[
             {"refreshToken": "t1", "region": "us-east-1"},
             {"refreshToken": "t2", "region": "eu-west-1"},
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_region_field_with_all_fields() {
-        // 测试包含所有字段的完整 JSON
+        // Test complete JSON with all fields
         let json = r#"{
             "id": 1,
             "accessToken": "access",
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_region_roundtrip() {
-        // 测试序列化和反序列化的往返一致性
+        // Test serialization and deserialization roundtrip consistency
         let original = KiroCredentials {
             id: Some(42),
             access_token: Some("token".to_string()),
@@ -530,7 +530,7 @@ mod tests {
         assert_eq!(parsed.machine_id, original.machine_id);
     }
 
-    // ============ auth_region / api_region 字段测试 ============
+    // ============ auth_region / api_region field tests ============
 
     #[test]
     fn test_auth_region_field_parsing() {
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_backward_compat_no_auth_api_region() {
-        // 旧格式 JSON 不包含 authRegion/apiRegion，应正常解析
+        // Legacy JSON format without authRegion/apiRegion should parse correctly
         let json = r#"{
             "refreshToken": "test_refresh",
             "region": "us-east-1"
@@ -609,11 +609,11 @@ mod tests {
         assert_eq!(creds.api_region, None);
     }
 
-    // ============ effective_auth_region / effective_api_region 优先级测试 ============
+    // ============ effective_auth_region / effective_api_region priority tests ============
 
     #[test]
     fn test_effective_auth_region_credential_auth_region_highest() {
-        // 凭据.auth_region > 凭据.region > config.auth_region > config.region
+        // credential.auth_region > credential.region > config.auth_region > config.region
         let mut config = Config::default();
         config.region = "config-region".to_string();
         config.auth_region = Some("config-auth-region".to_string());
@@ -633,7 +633,7 @@ mod tests {
 
         let mut creds = KiroCredentials::default();
         creds.region = Some("cred-region".to_string());
-        // auth_region 未设置
+        // auth_region not set
 
         assert_eq!(creds.effective_auth_region(&config), "cred-region");
     }
@@ -645,7 +645,7 @@ mod tests {
         config.auth_region = Some("config-auth-region".to_string());
 
         let creds = KiroCredentials::default();
-        // auth_region 和 region 均未设置
+        // auth_region and region both not set
 
         assert_eq!(creds.effective_auth_region(&config), "config-auth-region");
     }
@@ -654,7 +654,7 @@ mod tests {
     fn test_effective_auth_region_fallback_to_config_region() {
         let mut config = Config::default();
         config.region = "config-region".to_string();
-        // config.auth_region 未设置
+        // config.auth_region not set
 
         let creds = KiroCredentials::default();
 
@@ -663,7 +663,7 @@ mod tests {
 
     #[test]
     fn test_effective_api_region_credential_api_region_highest() {
-        // 凭据.api_region > config.api_region > config.region
+        // credential.api_region > config.api_region > config.region
         let mut config = Config::default();
         config.region = "config-region".to_string();
         config.api_region = Some("config-api-region".to_string());
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn test_effective_api_region_ignores_credential_region() {
-        // 凭据.region 不参与 api_region 的回退链
+        // credential.region does not participate in api_region fallback chain
         let mut config = Config::default();
         config.region = "config-region".to_string();
 
@@ -709,7 +709,7 @@ mod tests {
 
     #[test]
     fn test_auth_and_api_region_independent() {
-        // auth_region 和 api_region 互不影响
+        // auth_region and api_region are independent of each other
         let mut config = Config::default();
         config.region = "default".to_string();
 

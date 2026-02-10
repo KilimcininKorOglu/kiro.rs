@@ -1,6 +1,6 @@
-//! 事件模型
+//! Event models
 //!
-//! 定义 generateAssistantResponse 流式响应的事件类型
+//! Defines event types for generateAssistantResponse streaming responses
 
 mod assistant;
 mod base;

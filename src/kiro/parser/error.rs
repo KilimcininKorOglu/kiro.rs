@@ -1,33 +1,33 @@
-//! AWS Event Stream 解析错误定义
+//! AWS Event Stream parsing error definitions
 
 use std::fmt;
 
-/// 解析错误类型
+/// Parse error types
 #[derive(Debug)]
 pub enum ParseError {
-    /// 数据不足，需要更多字节
+    /// Insufficient data, need more bytes
     Incomplete { needed: usize, available: usize },
-    /// Prelude CRC 校验失败
+    /// Prelude CRC verification failed
     PreludeCrcMismatch { expected: u32, actual: u32 },
-    /// Message CRC 校验失败
+    /// Message CRC verification failed
     MessageCrcMismatch { expected: u32, actual: u32 },
-    /// 无效的头部值类型
+    /// Invalid header value type
     InvalidHeaderType(u8),
-    /// 头部解析错误
+    /// Header parsing error
     HeaderParseFailed(String),
-    /// 消息长度超限
+    /// Message length exceeds limit
     MessageTooLarge { length: u32, max: u32 },
-    /// 消息长度过小
+    /// Message length too small
     MessageTooSmall { length: u32, min: u32 },
-    /// 无效的消息类型
+    /// Invalid message type
     InvalidMessageType(String),
-    /// Payload 反序列化失败
+    /// Payload deserialization failed
     PayloadDeserialize(serde_json::Error),
-    /// IO 错误
+    /// IO error
     Io(std::io::Error),
-    /// 连续错误过多，解码器已停止
+    /// Too many consecutive errors, decoder stopped
     TooManyErrors { count: usize, last_error: String },
-    /// 缓冲区溢出
+    /// Buffer overflow
     BufferOverflow { size: usize, max: usize },
 }
 
@@ -37,42 +37,42 @@ impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Incomplete { needed, available } => {
-                write!(f, "数据不足: 需要 {} 字节, 当前 {} 字节", needed, available)
+                write!(f, "Insufficient data: need {} bytes, have {} bytes", needed, available)
             }
             Self::PreludeCrcMismatch { expected, actual } => {
                 write!(
                     f,
-                    "Prelude CRC 校验失败: 期望 0x{:08x}, 实际 0x{:08x}",
+                    "Prelude CRC verification failed: expected 0x{:08x}, actual 0x{:08x}",
                     expected, actual
                 )
             }
             Self::MessageCrcMismatch { expected, actual } => {
                 write!(
                     f,
-                    "Message CRC 校验失败: 期望 0x{:08x}, 实际 0x{:08x}",
+                    "Message CRC verification failed: expected 0x{:08x}, actual 0x{:08x}",
                     expected, actual
                 )
             }
-            Self::InvalidHeaderType(t) => write!(f, "无效的头部值类型: {}", t),
-            Self::HeaderParseFailed(msg) => write!(f, "头部解析失败: {}", msg),
+            Self::InvalidHeaderType(t) => write!(f, "Invalid header value type: {}", t),
+            Self::HeaderParseFailed(msg) => write!(f, "Header parsing failed: {}", msg),
             Self::MessageTooLarge { length, max } => {
-                write!(f, "消息长度超限: {} 字节 (最大 {})", length, max)
+                write!(f, "Message length exceeds limit: {} bytes (max {})", length, max)
             }
             Self::MessageTooSmall { length, min } => {
-                write!(f, "消息长度过小: {} 字节 (最小 {})", length, min)
+                write!(f, "Message length too small: {} bytes (min {})", length, min)
             }
-            Self::InvalidMessageType(t) => write!(f, "无效的消息类型: {}", t),
-            Self::PayloadDeserialize(e) => write!(f, "Payload 反序列化失败: {}", e),
-            Self::Io(e) => write!(f, "IO 错误: {}", e),
+            Self::InvalidMessageType(t) => write!(f, "Invalid message type: {}", t),
+            Self::PayloadDeserialize(e) => write!(f, "Payload deserialization failed: {}", e),
+            Self::Io(e) => write!(f, "IO error: {}", e),
             Self::TooManyErrors { count, last_error } => {
                 write!(
                     f,
-                    "连续错误过多 ({} 次)，解码器已停止: {}",
+                    "Too many consecutive errors ({} times), decoder stopped: {}",
                     count, last_error
                 )
             }
             Self::BufferOverflow { size, max } => {
-                write!(f, "缓冲区溢出: {} 字节 (最大 {})", size, max)
+                write!(f, "Buffer overflow: {} bytes (max {})", size, max)
             }
         }
     }
@@ -90,5 +90,5 @@ impl From<serde_json::Error> for ParseError {
     }
 }
 
-/// 解析结果类型
+/// Parse result type
 pub type ParseResult<T> = Result<T, ParseError>;

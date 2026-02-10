@@ -1,4 +1,4 @@
-//! Anthropic API 路由配置
+//! Anthropic API routing configuration
 
 use axum::{
     Router,
@@ -14,26 +14,26 @@ use super::{
     middleware::{AppState, auth_middleware, cors_layer},
 };
 
-/// 请求体最大大小限制 (50MB)
+/// Maximum request body size limit (50MB)
 const MAX_BODY_SIZE: usize = 50 * 1024 * 1024;
 
-/// 创建 Anthropic API 路由
+/// Create Anthropic API router
 ///
-/// # 端点
-/// - `GET /v1/models` - 获取可用模型列表
-/// - `POST /v1/messages` - 创建消息（对话）
-/// - `POST /v1/messages/count_tokens` - 计算 token 数量
+/// # Endpoints
+/// - `GET /v1/models` - Get list of available models
+/// - `POST /v1/messages` - Create message (conversation)
+/// - `POST /v1/messages/count_tokens` - Calculate token count
 ///
-/// # 认证
-/// 所有 `/v1` 路径需要 API Key 认证，支持：
+/// # Authentication
+/// All `/v1` paths require API Key authentication, supporting:
 /// - `x-api-key` header
 /// - `Authorization: Bearer <token>` header
 ///
-/// # 参数
-/// - `api_key`: API 密钥，用于验证客户端请求
-/// - `kiro_provider`: 可选的 KiroProvider，用于调用上游 API
+/// # Parameters
+/// - `api_key`: API key for validating client requests
+/// - `kiro_provider`: Optional KiroProvider for calling upstream API
 
-/// 创建带有 KiroProvider 的 Anthropic API 路由
+/// Create Anthropic API router with KiroProvider
 pub fn create_router_with_provider(
     api_key: impl Into<String>,
     kiro_provider: Option<KiroProvider>,
@@ -47,7 +47,7 @@ pub fn create_router_with_provider(
         state = state.with_profile_arn(arn);
     }
 
-    // 需要认证的 /v1 路由
+    // Authenticated /v1 routes
     let v1_routes = Router::new()
         .route("/models", get(get_models))
         .route("/messages", post(post_messages))
@@ -57,8 +57,8 @@ pub fn create_router_with_provider(
             auth_middleware,
         ));
 
-    // 需要认证的 /cc/v1 路由（Claude Code 兼容端点）
-    // 与 /v1 的区别：流式响应会等待 contextUsageEvent 后再发送 message_start
+    // Authenticated /cc/v1 routes (Claude Code compatible endpoints)
+    // Difference from /v1: streaming response waits for contextUsageEvent before sending message_start
     let cc_v1_routes = Router::new()
         .route("/messages", post(post_messages_cc))
         .route("/messages/count_tokens", post(count_tokens))
