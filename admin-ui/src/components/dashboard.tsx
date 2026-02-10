@@ -39,7 +39,11 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const itemsPerPage = 12
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark')
+      const saved = storage.getDarkMode()
+      if (saved) {
+        document.documentElement.classList.add('dark')
+      }
+      return saved
     }
     return false
   })
@@ -175,7 +179,9 @@ export function Dashboard({ onLogout }: DashboardProps) {
   }, [data?.credentials, loadAllBalances])
 
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode)
+    const newMode = !darkMode
+    setDarkMode(newMode)
+    storage.setDarkMode(newMode)
     document.documentElement.classList.toggle('dark')
   }
 
