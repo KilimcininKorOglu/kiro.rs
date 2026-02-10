@@ -101,8 +101,10 @@ export function Dashboard({ onLogout }: DashboardProps) {
     })
   }, [data?.credentials])
 
-  // Auto-load balance for credentials that don't have balance data yet
+  // Auto-load and refresh balance for all credentials
   const autoLoadBalanceRef = useRef(false)
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const loadBalanceForCredential = useCallback(async (id: number) => {
     setLoadingBalanceIds(prev => {
       const next = new Set(prev)
@@ -128,6 +130,17 @@ export function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [])
 
+  const loadAllBalances = useCallback(async (credentials: NonNullable<typeof data>['credentials']) => {
+    if (!credentials || credentials.length === 0) return
+
+    for (const credential of credentials) {
+      await loadBalanceForCredential(credential.id)
+      // Small delay between requests to avoid overwhelming the server
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }, [loadBalanceForCredential])
+
+  // Initial load on mount
   useEffect(() => {
     if (!data?.credentials || data.credentials.length === 0) return
     if (autoLoadBalanceRef.current) return
@@ -135,19 +148,31 @@ export function Dashboard({ onLogout }: DashboardProps) {
     // Mark as started to prevent duplicate loads
     autoLoadBalanceRef.current = true
 
-    // Load balance for all credentials that don't have balance data
-    const loadAllBalances = async () => {
-      for (const credential of data.credentials) {
-        if (!balanceMap.has(credential.id)) {
-          await loadBalanceForCredential(credential.id)
-          // Small delay between requests to avoid overwhelming the server
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-      }
+    loadAllBalances(data.credentials)
+  }, [data?.credentials, loadAllBalances])
+
+  // Auto-refresh balance every 30 seconds
+  useEffect(() => {
+    if (!data?.credentials || data.credentials.length === 0) return
+
+    // Clear existing interval
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current)
     }
 
-    loadAllBalances()
-  }, [data?.credentials, balanceMap, loadBalanceForCredential])
+    // Set up 30-second refresh interval
+    refreshIntervalRef.current = setInterval(() => {
+      loadAllBalances(data.credentials)
+    }, 30000)
+
+    // Cleanup on unmount or when credentials change
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current)
+        refreshIntervalRef.current = null
+      }
+    }
+  }, [data?.credentials, loadAllBalances])
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
