@@ -25,6 +25,7 @@ export interface CredentialStatusItem {
 // Balance response
 export interface BalanceResponse {
   id: number
+  email: string | null
   subscriptionTitle: string | null
   currentUsage: number
   usageLimit: number
