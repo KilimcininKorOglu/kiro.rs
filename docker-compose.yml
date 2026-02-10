@@ -1,6 +1,7 @@
 services:
   kiro-rs:
-    image: ghcr.io/huazz233/kiro-rs:latest
+    build: .
+    image: kiro-rs:latest
     container_name: kiro-rs
     restart: unless-stopped
     ports:
