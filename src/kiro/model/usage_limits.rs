@@ -12,6 +12,10 @@ pub struct UsageLimitsResponse {
     #[serde(default)]
     pub next_date_reset: Option<f64>,
 
+    /// User information
+    #[serde(default)]
+    pub user_info: Option<UserInfo>,
+
     /// Subscription information
     #[serde(default)]
     pub subscription_info: Option<SubscriptionInfo>,
@@ -19,6 +23,19 @@ pub struct UsageLimitsResponse {
     /// Usage breakdown list
     #[serde(default)]
     pub usage_breakdown_list: Vec<UsageBreakdown>,
+}
+
+/// User information
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserInfo {
+    /// User email
+    #[serde(default)]
+    pub email: Option<String>,
+
+    /// User ID
+    #[serde(default)]
+    pub user_id: Option<String>,
 }
 
 /// Subscription information
@@ -132,6 +149,13 @@ impl FreeTrialInfo {
 }
 
 impl UsageLimitsResponse {
+    /// Get user email
+    pub fn email(&self) -> Option<&str> {
+        self.user_info
+            .as_ref()
+            .and_then(|info| info.email.as_deref())
+    }
+
     /// Get subscription title
     pub fn subscription_title(&self) -> Option<&str> {
         self.subscription_info

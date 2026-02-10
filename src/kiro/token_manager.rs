@@ -37,6 +37,7 @@ struct JwtClaims {
 ///
 /// JWT format: header.payload.signature
 /// Payload is base64url-encoded JSON containing user claims
+/// Note: AWS SSO OIDC tokens are opaque, not JWT. Use getUsageLimits API instead.
 fn extract_email_from_jwt(access_token: &str) -> Option<String> {
     let parts: Vec<&str> = access_token.split('.').collect();
     if parts.len() != 3 {
@@ -395,7 +396,7 @@ pub(crate) async fn get_usage_limits(
 
     // Build URL
     let mut url = format!(
-        "https://{}/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST",
+        "https://{}/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST",
         host
     );
 
@@ -1448,18 +1449,32 @@ impl MultiTokenManager {
 
         let usage = get_usage_limits(&credentials, &self.config, &token, self.proxy.as_ref()).await?;
 
-        // Update subscription_title in credential if available
-        if let Some(title) = usage.subscription_title() {
+        // Update subscription_title and email in credential if available
+        let mut needs_persist = false;
+        {
             let mut entries = self.entries.lock();
             if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
-                if entry.credentials.subscription_title.as_deref() != Some(title) {
-                    entry.credentials.subscription_title = Some(title.to_string());
-                    drop(entries);
-                    // Persist to config file
-                    if let Err(e) = self.persist_credentials() {
-                        tracing::warn!("Failed to persist subscription_title: {}", e);
+                // Update subscription_title
+                if let Some(title) = usage.subscription_title() {
+                    if entry.credentials.subscription_title.as_deref() != Some(title) {
+                        entry.credentials.subscription_title = Some(title.to_string());
+                        needs_persist = true;
                     }
                 }
+                // Update email
+                if let Some(email) = usage.email() {
+                    if entry.credentials.email.as_deref() != Some(email) {
+                        tracing::info!("Got email from API for credential #{}: {}", id, email);
+                        entry.credentials.email = Some(email.to_string());
+                        needs_persist = true;
+                    }
+                }
+            }
+        }
+
+        if needs_persist {
+            if let Err(e) = self.persist_credentials() {
+                tracing::warn!("Failed to persist credential updates: {}", e);
             }
         }
 
