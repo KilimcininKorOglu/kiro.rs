@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { RefreshCw, ChevronUp, ChevronDown, Wallet, Trash2, Loader2 } from 'lucide-react'
+import { RefreshCw, ChevronUp, ChevronDown, Wallet, Trash2, Loader2, RotateCcw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,7 @@ import {
   useSetPriority,
   useResetFailure,
   useDeleteCredential,
+  useRefreshToken,
 } from '@/hooks/use-credentials'
 
 interface CredentialCardProps {
@@ -64,6 +65,7 @@ export function CredentialCard({
   const setPriority = useSetPriority()
   const resetFailure = useResetFailure()
   const deleteCredential = useDeleteCredential()
+  const refreshToken = useRefreshToken()
 
   const handleToggleDisabled = () => {
     setDisabled.mutate(
@@ -124,6 +126,17 @@ export function CredentialCard({
       },
       onError: (err) => {
         toast.error('Delete failed: ' + (err as Error).message)
+      },
+    })
+  }
+
+  const handleRefreshToken = () => {
+    refreshToken.mutate(credential.id, {
+      onSuccess: (res) => {
+        toast.success(res.message)
+      },
+      onError: (err) => {
+        toast.error('Refresh failed: ' + (err as Error).message)
       },
     })
   }
@@ -295,6 +308,19 @@ export function CredentialCard({
             >
               <ChevronDown className="h-4 w-4 mr-1" />
               Decrease Priority
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRefreshToken}
+              disabled={refreshToken.isPending}
+            >
+              {refreshToken.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-1" />
+              )}
+              Refresh Token
             </Button>
             <Button
               size="sm"

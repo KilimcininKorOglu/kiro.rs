@@ -124,3 +124,19 @@ pub async fn set_load_balancing_mode(
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }
+
+/// POST /api/admin/credentials/:id/refresh
+/// Force refresh token for credential
+pub async fn refresh_credential_token(
+    State(state): State<AdminState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    match state.service.refresh_token(id).await {
+        Ok(_) => Json(SuccessResponse::new(format!(
+            "Credential #{} token has been refreshed",
+            id
+        )))
+        .into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}

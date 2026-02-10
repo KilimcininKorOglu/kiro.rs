@@ -85,6 +85,12 @@ export async function deleteCredential(id: number): Promise<SuccessResponse> {
   return data
 }
 
+// Refresh credential token
+export async function refreshCredentialToken(id: number): Promise<SuccessResponse> {
+  const { data } = await api.post<SuccessResponse>(`/credentials/${id}/refresh`)
+  return data
+}
+
 // Get load balancing mode
 export async function getLoadBalancingMode(): Promise<{ mode: 'priority' | 'balanced' }> {
   const { data } = await api.get<{ mode: 'priority' | 'balanced' }>('/config/load-balancing')

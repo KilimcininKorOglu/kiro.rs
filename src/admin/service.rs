@@ -261,6 +261,32 @@ impl AdminService {
         Ok(LoadBalancingModeResponse { mode: req.mode })
     }
 
+    /// Force refresh token for a credential
+    pub async fn refresh_token(&self, id: u64) -> Result<(), AdminServiceError> {
+        self.token_manager
+            .force_refresh_token(id)
+            .await
+            .map_err(|e| self.classify_refresh_error(e, id))
+    }
+
+    /// Classify refresh errors
+    fn classify_refresh_error(&self, error: anyhow::Error, id: u64) -> AdminServiceError {
+        let msg = error.to_string();
+
+        if msg.contains("does not exist") {
+            return AdminServiceError::CredentialNotFound(id);
+        }
+
+        if msg.contains("expired") || msg.contains("invalid") || msg.contains("401") {
+            return AdminServiceError::TokenRefreshFailed(format!(
+                "Token refresh failed for credential #{}: {}",
+                id, msg
+            ));
+        }
+
+        AdminServiceError::InternalError(format!("Refresh failed: {}", msg))
+    }
+
     // ============ Balance cache persistence ============
 
     fn load_balance_cache_from(cache_path: &Option<PathBuf>) -> HashMap<u64, CachedBalance> {
