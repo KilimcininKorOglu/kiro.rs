@@ -12,26 +12,26 @@ import {
 } from '@/api/credentials'
 import type { AddCredentialRequest } from '@/types/api'
 
-// 查询凭据列表
+// Query credentials list
 export function useCredentials() {
   return useQuery({
     queryKey: ['credentials'],
     queryFn: getCredentials,
-    refetchInterval: 30000, // 每 30 秒刷新一次
+    refetchInterval: 30000, // Refresh every 30 seconds
   })
 }
 
-// 查询凭据余额
+// Query credential balance
 export function useCredentialBalance(id: number | null) {
   return useQuery({
     queryKey: ['credential-balance', id],
     queryFn: () => getCredentialBalance(id!),
     enabled: id !== null,
-    retry: false, // 余额查询失败时不重试（避免重复请求被封禁的账号）
+    retry: false, // Don't retry on balance query failure (avoid repeated requests to banned accounts)
   })
 }
 
-// 设置禁用状态
+// Set disabled status
 export function useSetDisabled() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -43,7 +43,7 @@ export function useSetDisabled() {
   })
 }
 
-// 设置优先级
+// Set priority
 export function useSetPriority() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -55,7 +55,7 @@ export function useSetPriority() {
   })
 }
 
-// 重置失败计数
+// Reset failure count
 export function useResetFailure() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -66,7 +66,7 @@ export function useResetFailure() {
   })
 }
 
-// 添加新凭据
+// Add new credential
 export function useAddCredential() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -77,7 +77,7 @@ export function useAddCredential() {
   })
 }
 
-// 删除凭据
+// Delete credential
 export function useDeleteCredential() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -88,7 +88,7 @@ export function useDeleteCredential() {
   })
 }
 
-// 获取负载均衡模式
+// Get load balancing mode
 export function useLoadBalancingMode() {
   return useQuery({
     queryKey: ['loadBalancingMode'],
@@ -96,7 +96,7 @@ export function useLoadBalancingMode() {
   })
 }
 
-// 设置负载均衡模式
+// Set load balancing mode
 export function useSetLoadBalancingMode() {
   const queryClient = useQueryClient()
   return useMutation({

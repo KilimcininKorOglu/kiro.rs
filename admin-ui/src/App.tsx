@@ -8,7 +8,7 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
-    // 检查是否已经有保存的 API Key
+    // Check if there is a saved API Key
     if (storage.getApiKey()) {
       setIsLoggedIn(true)
     }
