@@ -7,6 +7,7 @@ import {
   getCredentialBalance,
   addCredential,
   deleteCredential,
+  refreshCredentialToken,
   getLoadBalancingMode,
   setLoadBalancingMode,
 } from '@/api/credentials'
@@ -82,6 +83,17 @@ export function useDeleteCredential() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => deleteCredential(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['credentials'] })
+    },
+  })
+}
+
+// Refresh credential token
+export function useRefreshToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => refreshCredentialToken(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
     },

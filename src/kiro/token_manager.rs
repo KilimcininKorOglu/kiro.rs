@@ -1466,6 +1466,48 @@ impl MultiTokenManager {
         Ok(usage)
     }
 
+    /// Force refresh token for a specific credential (Admin API)
+    ///
+    /// Forces a token refresh regardless of expiration status.
+    /// Used to manually trigger refresh to update email and other JWT claims.
+    ///
+    /// # Returns
+    /// - `Ok(())` - Token refreshed successfully
+    /// - `Err(_)` - Refresh failed
+    pub async fn force_refresh_token(&self, id: u64) -> anyhow::Result<()> {
+        let credentials = {
+            let entries = self.entries.lock();
+            entries
+                .iter()
+                .find(|e| e.id == id)
+                .map(|e| e.credentials.clone())
+                .ok_or_else(|| anyhow::anyhow!("Credential does not exist: {}", id))?
+        };
+
+        tracing::info!("Force refreshing token for credential #{}", id);
+
+        let _guard = self.refresh_lock.lock().await;
+
+        let new_creds = refresh_token(&credentials, &self.config, self.proxy.as_ref()).await?;
+
+        // Update credentials in entries
+        {
+            let mut entries = self.entries.lock();
+            if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+                entry.credentials = new_creds.clone();
+            }
+        }
+
+        // Persist to config file
+        if let Err(e) = self.persist_credentials() {
+            tracing::warn!("Failed to persist after force refresh: {}", e);
+        } else {
+            tracing::info!("Credential #{} token refreshed and persisted", id);
+        }
+
+        Ok(())
+    }
+
     /// Add new credential (Admin API)
     ///
     /// # Flow
