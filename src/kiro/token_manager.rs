@@ -4,6 +4,7 @@
 //! Supports single credential (TokenManager) and multi-credential (MultiTokenManager) management
 
 use anyhow::bail;
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,51 @@ use crate::kiro::model::token_refresh::{
 };
 use crate::kiro::model::usage_limits::UsageLimitsResponse;
 use crate::model::config::Config;
+
+/// JWT claims structure for extracting email
+#[derive(Debug, Deserialize)]
+struct JwtClaims {
+    email: Option<String>,
+    preferred_username: Option<String>,
+    sub: Option<String>,
+}
+
+/// Extract email from JWT access token
+///
+/// JWT format: header.payload.signature
+/// Payload is base64url-encoded JSON containing user claims
+fn extract_email_from_jwt(access_token: &str) -> Option<String> {
+    let parts: Vec<&str> = access_token.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+
+    // Decode payload (second part)
+    let payload = parts[1];
+    let decoded = URL_SAFE_NO_PAD.decode(payload).ok()?;
+    let claims: JwtClaims = serde_json::from_slice(&decoded).ok()?;
+
+    // Priority: email > preferred_username (if contains @) > sub (if contains @)
+    if let Some(email) = claims.email {
+        if !email.is_empty() {
+            return Some(email);
+        }
+    }
+
+    if let Some(username) = claims.preferred_username {
+        if username.contains('@') {
+            return Some(username);
+        }
+    }
+
+    if let Some(sub) = claims.sub {
+        if sub.contains('@') {
+            return Some(sub);
+        }
+    }
+
+    None
+}
 
 /// Token manager
 ///
@@ -216,7 +262,15 @@ async fn refresh_social_token(
     let data: RefreshResponse = response.json().await?;
 
     let mut new_credentials = credentials.clone();
-    new_credentials.access_token = Some(data.access_token);
+    new_credentials.access_token = Some(data.access_token.clone());
+
+    // Extract email from JWT access token if not already set
+    if new_credentials.email.is_none() {
+        if let Some(email) = extract_email_from_jwt(&data.access_token) {
+            tracing::info!("Extracted email from JWT: {}", email);
+            new_credentials.email = Some(email);
+        }
+    }
 
     if let Some(new_refresh_token) = data.refresh_token {
         new_credentials.refresh_token = Some(new_refresh_token);
@@ -298,7 +352,15 @@ async fn refresh_idc_token(
     let data: IdcRefreshResponse = response.json().await?;
 
     let mut new_credentials = credentials.clone();
-    new_credentials.access_token = Some(data.access_token);
+    new_credentials.access_token = Some(data.access_token.clone());
+
+    // Extract email from JWT access token if not already set
+    if new_credentials.email.is_none() {
+        if let Some(email) = extract_email_from_jwt(&data.access_token) {
+            tracing::info!("Extracted email from JWT: {}", email);
+            new_credentials.email = Some(email);
+        }
+    }
 
     if let Some(new_refresh_token) = data.refresh_token {
         new_credentials.refresh_token = Some(new_refresh_token);

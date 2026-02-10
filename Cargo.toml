@@ -32,3 +32,4 @@ parking_lot = "0.12"  # High-performance synchronization primitives
 subtle = "2.6"        # Constant-time comparison (prevents timing attacks)
 rust-embed = "8"      # Embed static files
 mime_guess = "2"      # MIME type inference
+base64 = "0.22"       # Base64 encoding/decoding
