@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { RefreshCw, LogOut, Moon, Sun, Server, Plus, Upload, Trash2, RotateCcw, CheckCircle2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -100,6 +100,54 @@ export function Dashboard({ onLogout }: DashboardProps) {
       return next.size === prev.size ? prev : next
     })
   }, [data?.credentials])
+
+  // Auto-load balance for credentials that don't have balance data yet
+  const autoLoadBalanceRef = useRef(false)
+  const loadBalanceForCredential = useCallback(async (id: number) => {
+    setLoadingBalanceIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+
+    try {
+      const balance = await getCredentialBalance(id)
+      setBalanceMap(prev => {
+        const next = new Map(prev)
+        next.set(id, balance)
+        return next
+      })
+    } catch {
+      // Silently ignore errors during auto-load
+    } finally {
+      setLoadingBalanceIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!data?.credentials || data.credentials.length === 0) return
+    if (autoLoadBalanceRef.current) return
+
+    // Mark as started to prevent duplicate loads
+    autoLoadBalanceRef.current = true
+
+    // Load balance for all credentials that don't have balance data
+    const loadAllBalances = async () => {
+      for (const credential of data.credentials) {
+        if (!balanceMap.has(credential.id)) {
+          await loadBalanceForCredential(credential.id)
+          // Small delay between requests to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+      }
+    }
+
+    loadAllBalances()
+  }, [data?.credentials, balanceMap, loadBalanceForCredential])
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
