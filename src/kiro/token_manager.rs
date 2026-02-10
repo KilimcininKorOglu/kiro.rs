@@ -431,8 +431,9 @@ pub(crate) async fn get_usage_limits(
         .await?;
 
     let status = response.status();
+    let body_text = response.text().await.unwrap_or_default();
+
     if !status.is_success() {
-        let body_text = response.text().await.unwrap_or_default();
         let error_msg = match status.as_u16() {
             401 => "Authentication failed, Token invalid or expired",
             403 => "Insufficient permissions, unable to get usage limits",
@@ -443,7 +444,18 @@ pub(crate) async fn get_usage_limits(
         bail!("{}: {} {}", error_msg, status, body_text);
     }
 
-    let data: UsageLimitsResponse = response.json().await?;
+    // Debug log raw response to see userInfo structure
+    tracing::debug!("getUsageLimits raw response: {}", body_text);
+
+    let data: UsageLimitsResponse = serde_json::from_str(&body_text)?;
+
+    // Log if userInfo is present
+    if let Some(user_info) = &data.user_info {
+        tracing::debug!("userInfo present: email={:?}, userId={:?}", user_info.email, user_info.user_id);
+    } else {
+        tracing::debug!("userInfo is None in response");
+    }
+
     Ok(data)
 }
 
