@@ -10,9 +10,11 @@
 /admin-ui/dist/
 
 /admin-ui/tsconfig.tsbuildinfo
+/admin-ui/pnpm-lock.yaml
 .claude/
 /credentials.*
 
+Cargo.lock
 *.json
 logs/
 data/
