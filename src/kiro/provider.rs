@@ -312,6 +312,12 @@ impl KiroProvider {
 
             // Successful response
             if status.is_success() {
+                let credential_info = ctx.credentials.email.as_deref().unwrap_or("unknown");
+                tracing::info!(
+                    credential_id = ctx.id,
+                    credential_email = credential_info,
+                    "MCP request succeeded"
+                );
                 self.token_manager.report_success(ctx.id);
                 return Ok(response);
             }
@@ -446,6 +452,12 @@ impl KiroProvider {
 
             // Successful response
             if status.is_success() {
+                let credential_info = ctx.credentials.email.as_deref().unwrap_or("unknown");
+                tracing::info!(
+                    credential_id = ctx.id,
+                    credential_email = credential_info,
+                    "API request succeeded"
+                );
                 self.token_manager.report_success(ctx.id);
                 return Ok(response);
             }
