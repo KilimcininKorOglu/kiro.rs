@@ -1,69 +1,69 @@
 # kiro-rs
 
-一个用 Rust 编写的 Anthropic Claude API 兼容代理服务，将 Anthropic API 请求转换为 Kiro API 请求。
+An Anthropic Claude API compatible proxy service written in Rust that converts Anthropic API requests to Kiro API requests.
 
-## 免责声明
+## Disclaimer
 
-本项目仅供研究使用, Use at your own risk, 使用本项目所导致的任何后果由使用人承担, 与本项目无关。
-本项目与 AWS/KIRO/Anthropic/Claude 等官方无关, 本项目不代表官方立场。
+This project is for research purposes only. Use at your own risk. Any consequences resulting from the use of this project are the responsibility of the user and are not related to this project.
+This project is not affiliated with AWS/KIRO/Anthropic/Claude or any official entities and does not represent any official position.
 
-## 注意！
+## Important Notice
 
-因 TLS 默认从 native-tls 切换至 rustls，你可能需要专门安装证书后才能配置 HTTP 代理。可通过 `config.json` 的 `tlsBackend` 切回 `native-tls`。
-如果遇到请求报错, 尤其是无法刷新 token, 或者是直接返回 error request, 请尝试切换 tls 后端为 `native-tls`, 一般即可解决。
+Since TLS has been switched from native-tls to rustls by default, you may need to install certificates before configuring an HTTP proxy. You can switch back to `native-tls` via the `tlsBackend` field in `config.json`.
+If you encounter request errors, especially when unable to refresh tokens or receiving direct error responses, try switching the TLS backend to `native-tls`, which usually resolves the issue.
 
-**Write Failed/会话卡死**: 如果遇到持续的 Write File / Write Failed 并导致会话不可用，参考 Issue [#22](https://github.com/hank9999/kiro.rs/issues/22) 和 [#49](https://github.com/hank9999/kiro.rs/issues/49) 的说明与临时解决方案（通常与输出过长被截断有关，可尝试调低输出相关 token 上限）
+**Write Failed/Session Freeze**: If you encounter persistent Write File / Write Failed errors causing the session to become unusable, refer to Issue [#22](https://github.com/hank9999/kiro.rs/issues/22) and [#49](https://github.com/hank9999/kiro.rs/issues/49) for explanations and temporary solutions (usually related to output being truncated due to length; try lowering the output token limit).
 
-## 功能特性
+## Features
 
-- **Anthropic API 兼容**: 完整支持 Anthropic Claude API 格式
-- **流式响应**: 支持 SSE (Server-Sent Events) 流式输出
-- **Token 自动刷新**: 自动管理和刷新 OAuth Token
-- **多凭据支持**: 支持配置多个凭据，按优先级自动故障转移
-- **负载均衡**: 支持 `priority`（按优先级）和 `balanced`（均衡分配）两种模式
-- **智能重试**: 单凭据最多重试 3 次，单请求最多重试 9 次
-- **凭据回写**: 多凭据格式下自动回写刷新后的 Token
-- **Thinking 模式**: 支持 Claude 的 extended thinking 功能
-- **工具调用**: 完整支持 function calling / tool use
-- **WebSearch**: 内置 WebSearch 工具转换逻辑
-- **多模型支持**: 支持 Sonnet、Opus、Haiku 系列模型
-- **Admin 管理**: 可选的 Web 管理界面和 API，支持凭据管理、余额查询等
-- **多级 Region 配置**: 支持全局和凭据级别的 Auth Region / API Region 配置
+- **Anthropic API Compatible**: Full support for Anthropic Claude API format
+- **Streaming Responses**: Support for SSE (Server-Sent Events) streaming output
+- **Automatic Token Refresh**: Automatic OAuth token management and refresh
+- **Multi-Credential Support**: Configure multiple credentials with automatic priority-based failover
+- **Load Balancing**: Support for `priority` (by priority) and `balanced` (even distribution) modes
+- **Smart Retry**: Up to 3 retries per credential, up to 9 retries per request
+- **Credential Writeback**: Automatic writeback of refreshed tokens in multi-credential format
+- **Thinking Mode**: Support for Claude's extended thinking feature
+- **Tool Calling**: Full support for function calling / tool use
+- **WebSearch**: Built-in WebSearch tool conversion logic
+- **Multi-Model Support**: Support for Sonnet, Opus, and Haiku model series
+- **Admin Management**: Optional web management interface and API for credential management, balance queries, etc.
+- **Multi-Level Region Configuration**: Support for global and credential-level Auth Region / API Region configuration
 
 ---
 
-- [开始](#开始)
-  - [1. 编译](#1-编译)
-  - [2. 最小配置](#2-最小配置)
-  - [3. 启动](#3-启动)
-  - [4. 验证](#4-验证)
+- [Getting Started](#getting-started)
+  - [1. Build](#1-build)
+  - [2. Minimal Configuration](#2-minimal-configuration)
+  - [3. Start](#3-start)
+  - [4. Verify](#4-verify)
   - [Docker](#docker)
-- [配置详解](#配置详解)
+- [Configuration Details](#configuration-details)
   - [config.json](#configjson)
   - [credentials.json](#credentialsjson)
-  - [Region 配置](#region-配置)
-  - [认证方式](#认证方式)
-  - [环境变量](#环境变量)
-- [API 端点](#api-端点)
-  - [标准端点 (/v1)](#标准端点-v1)
-  - [Claude Code 兼容端点 (/cc/v1)](#claude-code-兼容端点-ccv1)
-  - [Thinking 模式](#thinking-模式)
-  - [工具调用](#工具调用)
-- [模型映射](#模型映射)
-- [Admin（可选）](#admin可选)
-- [注意事项](#注意事项)
-- [项目结构](#项目结构)
-- [技术栈](#技术栈)
+  - [Region Configuration](#region-configuration)
+  - [Authentication Methods](#authentication-methods)
+  - [Environment Variables](#environment-variables)
+- [API Endpoints](#api-endpoints)
+  - [Standard Endpoints (/v1)](#standard-endpoints-v1)
+  - [Claude Code Compatible Endpoints (/cc/v1)](#claude-code-compatible-endpoints-ccv1)
+  - [Thinking Mode](#thinking-mode)
+  - [Tool Calling](#tool-calling)
+- [Model Mapping](#model-mapping)
+- [Admin (Optional)](#admin-optional)
+- [Notes](#notes)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
 - [License](#license)
-- [致谢](#致谢)
+- [Acknowledgments](#acknowledgments)
 
-## 开始
+## Getting Started
 
-### 1. 编译
+### 1. Build
 
-> PS: 如果不想编辑可以直接前往 Release 下载二进制文件
+> Note: If you don't want to build, you can download pre-built binaries from the Releases page.
 
-> **前置步骤**：编译前需要先构建前端 Admin UI（用于嵌入到二进制中）：
+> **Prerequisites**: Before building, you need to build the Admin UI frontend (to be embedded in the binary):
 > ```bash
 > cd admin-ui && pnpm install && pnpm build
 > ```
@@ -72,9 +72,9 @@
 cargo build --release
 ```
 
-### 2. 最小配置
+### 2. Minimal Configuration
 
-创建 `config.json`：
+Create `config.json`:
 
 ```json
 {
@@ -84,45 +84,45 @@ cargo build --release
    "region": "us-east-1"
 }
 ```
-> PS: 如果你需要 Web 管理面板, 请注意配置 `adminApiKey`
+> Note: If you need the web management panel, make sure to configure `adminApiKey`.
 
-创建 `credentials.json`（从 Kiro IDE 等中获取凭证信息）：
-> PS: 可以前往 Web 管理面板配置跳过本步骤
-> 如果你对凭据地域有疑惑, 请查看 [Region 配置](#region-配置)
+Create `credentials.json` (obtain credential information from Kiro IDE, etc.):
+> Note: You can skip this step by configuring credentials via the web management panel.
+> If you have questions about credential regions, see [Region Configuration](#region-configuration).
 
-Social 认证：
+Social authentication:
 ```json
 {
-   "refreshToken": "你的刷新token",
+   "refreshToken": "your-refresh-token",
    "expiresAt": "2025-12-31T02:32:45.144Z",
    "authMethod": "social"
 }
 ```
 
-IdC 认证：
+IdC authentication:
 ```json
 {
-   "refreshToken": "你的刷新token",
+   "refreshToken": "your-refresh-token",
    "expiresAt": "2025-12-31T02:32:45.144Z",
    "authMethod": "idc",
-   "clientId": "你的clientId",
-   "clientSecret": "你的clientSecret"
+   "clientId": "your-client-id",
+   "clientSecret": "your-client-secret"
 }
 ```
 
-### 3. 启动
+### 3. Start
 
 ```bash
 ./target/release/kiro-rs
 ```
 
-或指定配置文件路径：
+Or specify configuration file paths:
 
 ```bash
 ./target/release/kiro-rs -c /path/to/config.json --credentials /path/to/credentials.json
 ```
 
-### 4. 验证
+### 4. Verify
 
 ```bash
 curl http://127.0.0.1:8990/v1/messages \
@@ -140,41 +140,41 @@ curl http://127.0.0.1:8990/v1/messages \
 
 ### Docker
 
-也可以通过 Docker 启动：
+You can also start via Docker:
 
 ```bash
 docker-compose up
 ```
 
-需要将 `config.json` 和 `credentials.json` 挂载到容器中，具体参见 `docker-compose.yml`。
+You need to mount `config.json` and `credentials.json` into the container. See `docker-compose.yml` for details.
 
-## 配置详解
+## Configuration Details
 
 ### config.json
 
-| 字段 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `host` | string | `127.0.0.1` | 服务监听地址 |
-| `port` | number | `8080` | 服务监听端口 |
-| `apiKey` | string | - | 自定义 API Key（用于客户端认证，必配） |
-| `region` | string | `us-east-1` | AWS 区域 |
-| `authRegion` | string | - | Auth Region（用于 Token 刷新），未配置时回退到 region |
-| `apiRegion` | string | - | API Region（用于 API 请求），未配置时回退到 region |
-| `kiroVersion` | string | `0.9.2` | Kiro 版本号 |
-| `machineId` | string | - | 自定义机器码（64位十六进制），不定义则自动生成 |
-| `systemVersion` | string | 随机 | 系统版本标识 |
-| `nodeVersion` | string | `22.21.1` | Node.js 版本标识 |
-| `tlsBackend` | string | `rustls` | TLS 后端：`rustls` 或 `native-tls` |
-| `countTokensApiUrl` | string | - | 外部 count_tokens API 地址 |
-| `countTokensApiKey` | string | - | 外部 count_tokens API 密钥 |
-| `countTokensAuthType` | string | `x-api-key` | 外部 API 认证类型：`x-api-key` 或 `bearer` |
-| `proxyUrl` | string | - | HTTP/SOCKS5 代理地址 |
-| `proxyUsername` | string | - | 代理用户名 |
-| `proxyPassword` | string | - | 代理密码 |
-| `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API 和 Web 管理界面 |
-| `loadBalancingMode` | string | `priority` | 负载均衡模式：`priority`（按优先级）或 `balanced`（均衡分配） |
+| Field                 | Type   | Default     | Description                                                              |
+|-----------------------|--------|-------------|--------------------------------------------------------------------------|
+| `host`                | string | `127.0.0.1` | Service listen address                                                   |
+| `port`                | number | `8080`      | Service listen port                                                      |
+| `apiKey`              | string | -           | Custom API key (for client authentication, required)                     |
+| `region`              | string | `us-east-1` | AWS region                                                               |
+| `authRegion`          | string | -           | Auth Region (for token refresh), falls back to region if not configured  |
+| `apiRegion`           | string | -           | API Region (for API requests), falls back to region if not configured    |
+| `kiroVersion`         | string | `0.9.2`     | Kiro version number                                                      |
+| `machineId`           | string | -           | Custom machine ID (64-bit hex), auto-generated if not defined            |
+| `systemVersion`       | string | random      | System version identifier                                                |
+| `nodeVersion`         | string | `22.21.1`   | Node.js version identifier                                               |
+| `tlsBackend`          | string | `rustls`    | TLS backend: `rustls` or `native-tls`                                    |
+| `countTokensApiUrl`   | string | -           | External count_tokens API URL                                            |
+| `countTokensApiKey`   | string | -           | External count_tokens API key                                            |
+| `countTokensAuthType` | string | `x-api-key` | External API auth type: `x-api-key` or `bearer`                          |
+| `proxyUrl`            | string | -           | HTTP/SOCKS5 proxy URL                                                    |
+| `proxyUsername`       | string | -           | Proxy username                                                           |
+| `proxyPassword`       | string | -           | Proxy password                                                           |
+| `adminApiKey`         | string | -           | Admin API key, enables credential management API and web UI when set     |
+| `loadBalancingMode`   | string | `priority`  | Load balancing mode: `priority` (by priority) or `balanced` (even dist.) |
 
-完整配置示例：
+Full configuration example:
 
 ```json
 {
@@ -184,7 +184,7 @@ docker-compose up
    "region": "us-east-1",
    "tlsBackend": "rustls",
    "kiroVersion": "0.9.2",
-   "machineId": "64位十六进制机器码",
+   "machineId": "64-bit-hex-machine-id",
    "systemVersion": "darwin#24.6.0",
    "nodeVersion": "22.21.1",
    "authRegion": "us-east-1",
@@ -202,57 +202,57 @@ docker-compose up
 
 ### credentials.json
 
-支持单对象格式（向后兼容）或数组格式（多凭据）。
+Supports single object format (backward compatible) or array format (multi-credential).
 
-#### 字段说明
+#### Field Description
 
-| 字段             | 类型     | 描述                                          |
-|----------------|--------|---------------------------------------------|
-| `id`           | number | 凭据唯一 ID（可选，仅用于 Admin API 管理；手写文件可不填）        |
-| `accessToken`  | string | OAuth 访问令牌（可选，可自动刷新）                        |
-| `refreshToken` | string | OAuth 刷新令牌                                  |
-| `profileArn`   | string | AWS Profile ARN（可选，登录时返回）                   |
-| `expiresAt`    | string | Token 过期时间 (RFC3339)                        |
-| `authMethod`   | string | 认证方式：`social` 或 `idc`                       |
-| `clientId`     | string | IdC 登录的客户端 ID（IdC 认证必填）                     |
-| `clientSecret` | string | IdC 登录的客户端密钥（IdC 认证必填）                      |
-| `priority`     | number | 凭据优先级，数字越小越优先，默认为 0                         |
-| `region`       | string | 凭据级 Auth Region, 兼容字段                       |
-| `authRegion`   | string | 凭据级 Auth Region，用于 Token 刷新, 未配置时回退到 region |
-| `apiRegion`    | string | 凭据级 API Region，用于 API 请求                    |
-| `machineId`    | string | 凭据级机器码（64位十六进制）                             |
-| `email`        | string | 用户邮箱（可选，从 API 获取）                           |
+| Field          | Type   | Description                                                                 |
+|----------------|--------|-----------------------------------------------------------------------------|
+| `id`           | number | Unique credential ID (optional, only for Admin API management)              |
+| `accessToken`  | string | OAuth access token (optional, auto-refreshed)                               |
+| `refreshToken` | string | OAuth refresh token                                                         |
+| `profileArn`   | string | AWS Profile ARN (optional, returned on login)                               |
+| `expiresAt`    | string | Token expiration time (RFC3339)                                             |
+| `authMethod`   | string | Authentication method: `social` or `idc`                                    |
+| `clientId`     | string | IdC login client ID (required for IdC auth)                                 |
+| `clientSecret` | string | IdC login client secret (required for IdC auth)                             |
+| `priority`     | number | Credential priority, lower number = higher priority, default is 0           |
+| `region`       | string | Credential-level Auth Region, compatibility field                           |
+| `authRegion`   | string | Credential-level Auth Region for token refresh, falls back to region        |
+| `apiRegion`    | string | Credential-level API Region for API requests                                |
+| `machineId`    | string | Credential-level machine ID (64-bit hex)                                    |
+| `email`        | string | User email (optional, obtained from API)                                    |
 
-说明：
-- IdC / Builder-ID / IAM 在本项目里属于同一种登录方式，配置时统一使用 `authMethod: "idc"`
-- 为兼容旧配置，`builder-id` / `iam` 仍可被识别，但会按 `idc` 处理
+Notes:
+- IdC / Builder-ID / IAM are treated as the same login method in this project; use `authMethod: "idc"` for configuration
+- For backward compatibility, `builder-id` / `iam` are still recognized but processed as `idc`
 
-#### 单凭据格式（旧格式，向后兼容）
+#### Single Credential Format (Legacy, Backward Compatible)
 
 ```json
 {
-   "accessToken": "请求token，一般有效期一小时，可选",
-   "refreshToken": "刷新token，一般有效期7-30天不等",
+   "accessToken": "request-token-usually-valid-for-one-hour-optional",
+   "refreshToken": "refresh-token-usually-valid-for-7-30-days",
    "profileArn": "arn:aws:codewhisperer:us-east-1:111112222233:profile/QWER1QAZSDFGH",
    "expiresAt": "2025-12-31T02:32:45.144Z",
    "authMethod": "social",
-   "clientId": "IdC 登录需要",
-   "clientSecret": "IdC 登录需要"
+   "clientId": "required-for-idc-login",
+   "clientSecret": "required-for-idc-login"
 }
 ```
 
-#### 多凭据格式（支持故障转移和自动回写）
+#### Multi-Credential Format (Supports Failover and Auto-Writeback)
 
 ```json
 [
    {
-      "refreshToken": "第一个凭据的刷新token",
+      "refreshToken": "first-credential-refresh-token",
       "expiresAt": "2025-12-31T02:32:45.144Z",
       "authMethod": "social",
       "priority": 0
    },
    {
-      "refreshToken": "第二个凭据的刷新token",
+      "refreshToken": "second-credential-refresh-token",
       "expiresAt": "2025-12-31T02:32:45.144Z",
       "authMethod": "idc",
       "clientId": "xxxxxxxxx",
@@ -263,25 +263,25 @@ docker-compose up
 ]
 ```
 
-多凭据特性：
-- 按 `priority` 字段排序，数字越小优先级越高（默认为 0）
-- 单凭据最多重试 3 次，单请求最多重试 9 次
-- 自动故障转移到下一个可用凭据
-- 多凭据格式下 Token 刷新后自动回写到源文件
+Multi-credential features:
+- Sorted by `priority` field, lower number = higher priority (default is 0)
+- Up to 3 retries per credential, up to 9 retries per request
+- Automatic failover to the next available credential
+- Automatic writeback of refreshed tokens to source file in multi-credential format
 
-### Region 配置
+### Region Configuration
 
-支持多级 Region 配置，分别控制 Token 刷新和 API 请求使用的区域。
+Supports multi-level region configuration to separately control regions for token refresh and API requests.
 
-**Auth Region**（Token 刷新）优先级：
-`凭据.authRegion` > `凭据.region` > `config.authRegion` > `config.region`
+**Auth Region** (Token Refresh) Priority:
+`credential.authRegion` > `credential.region` > `config.authRegion` > `config.region`
 
-**API Region**（API 请求）优先级：
-`凭据.apiRegion` > `config.apiRegion` > `config.region`
+**API Region** (API Requests) Priority:
+`credential.apiRegion` > `config.apiRegion` > `config.region`
 
-### 认证方式
+### Authentication Methods
 
-客户端请求本服务时，支持两种认证方式：
+When clients make requests to this service, two authentication methods are supported:
 
 1. **x-api-key Header**
    ```
@@ -293,39 +293,39 @@ docker-compose up
    Authorization: Bearer sk-your-api-key
    ```
 
-### 环境变量
+### Environment Variables
 
-可通过环境变量配置日志级别：
+You can configure the log level via environment variables:
 
 ```bash
 RUST_LOG=debug ./target/release/kiro-rs
 ```
 
-## API 端点
+## API Endpoints
 
-### 标准端点 (/v1)
+### Standard Endpoints (/v1)
 
-| 端点 | 方法 | 描述 |
-|------|------|------|
-| `/v1/models` | GET | 获取可用模型列表 |
-| `/v1/messages` | POST | 创建消息（对话） |
-| `/v1/messages/count_tokens` | POST | 估算 Token 数量 |
+| Endpoint                    | Method | Description              |
+|-----------------------------|--------|--------------------------|
+| `/v1/models`                | GET    | Get available model list |
+| `/v1/messages`              | POST   | Create message (chat)    |
+| `/v1/messages/count_tokens` | POST   | Estimate token count     |
 
-### Claude Code 兼容端点 (/cc/v1)
+### Claude Code Compatible Endpoints (/cc/v1)
 
-| 端点 | 方法 | 描述 |
-|------|------|------|
-| `/cc/v1/messages` | POST | 创建消息（缓冲模式，确保 `input_tokens` 准确） |
-| `/cc/v1/messages/count_tokens` | POST | 估算 Token 数量（与 `/v1` 相同） |
+| Endpoint                       | Method | Description                                          |
+|--------------------------------|--------|------------------------------------------------------|
+| `/cc/v1/messages`              | POST   | Create message (buffered mode, accurate input_tokens)|
+| `/cc/v1/messages/count_tokens` | POST   | Estimate token count (same as `/v1`)                 |
 
-> **`/cc/v1/messages` 与 `/v1/messages` 的区别**：
-> - `/v1/messages`：实时流式返回，`message_start` 中的 `input_tokens` 是估算值
-> - `/cc/v1/messages`：缓冲模式，等待上游流完成后，用从 `contextUsageEvent` 计算的准确 `input_tokens` 更正 `message_start`，然后一次性返回所有事件
-> - 等待期间会每 25 秒发送 `ping` 事件保活
+> **Difference between `/cc/v1/messages` and `/v1/messages`**:
+> - `/v1/messages`: Real-time streaming, `input_tokens` in `message_start` is an estimate
+> - `/cc/v1/messages`: Buffered mode, waits for upstream stream to complete, corrects `message_start` with accurate `input_tokens` calculated from `contextUsageEvent`, then returns all events at once
+> - Sends `ping` events every 25 seconds during the wait to keep the connection alive
 
-### Thinking 模式
+### Thinking Mode
 
-支持 Claude 的 extended thinking 功能：
+Supports Claude's extended thinking feature:
 
 ```json
 {
@@ -339,9 +339,9 @@ RUST_LOG=debug ./target/release/kiro-rs
 }
 ```
 
-### 工具调用
+### Tool Calling
 
-完整支持 Anthropic 的 tool use 功能：
+Full support for Anthropic's tool use feature:
 
 ```json
 {
@@ -350,7 +350,7 @@ RUST_LOG=debug ./target/release/kiro-rs
   "tools": [
     {
       "name": "get_weather",
-      "description": "获取指定城市的天气",
+      "description": "Get weather for a specified city",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -364,111 +364,111 @@ RUST_LOG=debug ./target/release/kiro-rs
 }
 ```
 
-## 模型映射
+## Model Mapping
 
-| Anthropic 模型 | Kiro 模型 |
-|----------------|-----------|
-| `*sonnet*` | `claude-sonnet-4.5` |
-| `*opus*`（含 4.5/4-5） | `claude-opus-4.5` |
-| `*opus*`（其他） | `claude-opus-4.6` |
-| `*haiku*` | `claude-haiku-4.5` |
+| Anthropic Model            | Kiro Model         |
+|----------------------------|--------------------|
+| `*sonnet*`                 | `claude-sonnet-4.5`|
+| `*opus*` (with 4.5/4-5)    | `claude-opus-4.5`  |
+| `*opus*` (others)          | `claude-opus-4.6`  |
+| `*haiku*`                  | `claude-haiku-4.5` |
 
-## Admin（可选）
+## Admin (Optional)
 
-当 `config.json` 配置了非空 `adminApiKey` 时，会启用：
+When `adminApiKey` is configured in `config.json`, the following are enabled:
 
-- **Admin API（认证同 API Key）**
-  - `GET /api/admin/credentials` - 获取所有凭据状态
-  - `POST /api/admin/credentials` - 添加新凭据
-  - `DELETE /api/admin/credentials/:id` - 删除凭据
-  - `POST /api/admin/credentials/:id/disabled` - 设置凭据禁用状态
-  - `POST /api/admin/credentials/:id/priority` - 设置凭据优先级
-  - `POST /api/admin/credentials/:id/reset` - 重置失败计数
-  - `GET /api/admin/credentials/:id/balance` - 获取凭据余额
+- **Admin API (authenticated with API Key)**
+  - `GET /api/admin/credentials` - Get all credential statuses
+  - `POST /api/admin/credentials` - Add new credential
+  - `DELETE /api/admin/credentials/:id` - Delete credential
+  - `POST /api/admin/credentials/:id/disabled` - Set credential disabled status
+  - `POST /api/admin/credentials/:id/priority` - Set credential priority
+  - `POST /api/admin/credentials/:id/reset` - Reset failure count
+  - `GET /api/admin/credentials/:id/balance` - Get credential balance
 
 - **Admin UI**
-  - `GET /admin` - 访问管理页面（需要在编译前构建 `admin-ui/dist`）
+  - `GET /admin` - Access management page (requires building `admin-ui/dist` before compilation)
 
-## 注意事项
+## Notes
 
-1. **凭证安全**: 请妥善保管 `credentials.json` 文件，不要提交到版本控制
-2. **Token 刷新**: 服务会自动刷新过期的 Token，无需手动干预
-3. **WebSearch 工具**: 当 `tools` 列表仅包含一个 `web_search` 工具时，会走内置 WebSearch 转换逻辑
+1. **Credential Security**: Keep your `credentials.json` file secure and do not commit it to version control
+2. **Token Refresh**: The service automatically refreshes expired tokens without manual intervention
+3. **WebSearch Tool**: When the `tools` list contains only a single `web_search` tool, the built-in WebSearch conversion logic is used
 
-## 项目结构
+## Project Structure
 
 ```
 kiro-rs/
-├── src/
-│   ├── main.rs                 # 程序入口
-│   ├── http_client.rs          # HTTP 客户端构建
-│   ├── token.rs                # Token 计算模块
-│   ├── debug.rs                # 调试工具
-│   ├── test.rs                 # 测试
-│   ├── model/                  # 配置和参数模型
-│   │   ├── config.rs           # 应用配置
-│   │   └── arg.rs              # 命令行参数
-│   ├── anthropic/              # Anthropic API 兼容层
-│   │   ├── router.rs           # 路由配置
-│   │   ├── handlers.rs         # 请求处理器
-│   │   ├── middleware.rs       # 认证中间件
-│   │   ├── types.rs            # 类型定义
-│   │   ├── converter.rs        # 协议转换器
-│   │   ├── stream.rs           # 流式响应处理
-│   │   └── websearch.rs        # WebSearch 工具处理
-│   ├── kiro/                   # Kiro API 客户端
-│   │   ├── provider.rs         # API 提供者
-│   │   ├── token_manager.rs    # Token 管理
-│   │   ├── machine_id.rs       # 设备指纹生成
-│   │   ├── model/              # 数据模型
-│   │   │   ├── credentials.rs  # OAuth 凭证
-│   │   │   ├── events/         # 响应事件类型
-│   │   │   ├── requests/       # 请求类型
-│   │   │   ├── common/         # 共享类型
-│   │   │   ├── token_refresh.rs # Token 刷新模型
-│   │   │   └── usage_limits.rs # 使用额度模型
-│   │   └── parser/             # AWS Event Stream 解析器
-│   │       ├── decoder.rs      # 流式解码器
-│   │       ├── frame.rs        # 帧解析
-│   │       ├── header.rs       # 头部解析
-│   │       ├── error.rs        # 错误类型
-│   │       └── crc.rs          # CRC 校验
-│   ├── admin/                  # Admin API 模块
-│   │   ├── router.rs           # 路由配置
-│   │   ├── handlers.rs         # 请求处理器
-│   │   ├── service.rs          # 业务逻辑服务
-│   │   ├── types.rs            # 类型定义
-│   │   ├── middleware.rs       # 认证中间件
-│   │   └── error.rs            # 错误处理
-│   ├── admin_ui/               # Admin UI 静态文件嵌入
-│   │   └── router.rs           # 静态文件路由
-│   └── common/                 # 公共模块
-│       └── auth.rs             # 认证工具函数
-├── admin-ui/                   # Admin UI 前端工程（构建产物会嵌入二进制）
-├── tools/                      # 辅助工具
-├── Cargo.toml                  # 项目配置
-├── config.example.json         # 配置示例
-├── docker-compose.yml          # Docker Compose 配置
-└── Dockerfile                  # Docker 构建文件
++-- src/
+|   +-- main.rs                 # Entry point
+|   +-- http_client.rs          # HTTP client builder
+|   +-- token.rs                # Token calculation module
+|   +-- debug.rs                # Debug tools
+|   +-- test.rs                 # Tests
+|   +-- model/                  # Configuration and parameter models
+|   |   +-- config.rs           # Application configuration
+|   |   +-- arg.rs              # Command line arguments
+|   +-- anthropic/              # Anthropic API compatibility layer
+|   |   +-- router.rs           # Route configuration
+|   |   +-- handlers.rs         # Request handlers
+|   |   +-- middleware.rs       # Authentication middleware
+|   |   +-- types.rs            # Type definitions
+|   |   +-- converter.rs        # Protocol converter
+|   |   +-- stream.rs           # Streaming response handling
+|   |   +-- websearch.rs        # WebSearch tool handling
+|   +-- kiro/                   # Kiro API client
+|   |   +-- provider.rs         # API provider
+|   |   +-- token_manager.rs    # Token management
+|   |   +-- machine_id.rs       # Device fingerprint generation
+|   |   +-- model/              # Data models
+|   |   |   +-- credentials.rs  # OAuth credentials
+|   |   |   +-- events/         # Response event types
+|   |   |   +-- requests/       # Request types
+|   |   |   +-- common/         # Shared types
+|   |   |   +-- token_refresh.rs# Token refresh model
+|   |   |   +-- usage_limits.rs # Usage quota model
+|   |   +-- parser/             # AWS Event Stream parser
+|   |       +-- decoder.rs      # Stream decoder
+|   |       +-- frame.rs        # Frame parsing
+|   |       +-- header.rs       # Header parsing
+|   |       +-- error.rs        # Error types
+|   |       +-- crc.rs          # CRC validation
+|   +-- admin/                  # Admin API module
+|   |   +-- router.rs           # Route configuration
+|   |   +-- handlers.rs         # Request handlers
+|   |   +-- service.rs          # Business logic service
+|   |   +-- types.rs            # Type definitions
+|   |   +-- middleware.rs       # Authentication middleware
+|   |   +-- error.rs            # Error handling
+|   +-- admin_ui/               # Admin UI static file embedding
+|   |   +-- router.rs           # Static file routing
+|   +-- common/                 # Common modules
+|       +-- auth.rs             # Authentication utility functions
++-- admin-ui/                   # Admin UI frontend (build output embedded in binary)
++-- tools/                      # Utility tools
++-- Cargo.toml                  # Project configuration
++-- config.example.json         # Configuration example
++-- docker-compose.yml          # Docker Compose configuration
++-- Dockerfile                  # Docker build file
 ```
 
-## 技术栈
+## Tech Stack
 
-- **Web 框架**: [Axum](https://github.com/tokio-rs/axum) 0.8
-- **异步运行时**: [Tokio](https://tokio.rs/)
-- **HTTP 客户端**: [Reqwest](https://github.com/seanmonstar/reqwest)
-- **序列化**: [Serde](https://serde.rs/)
-- **日志**: [tracing](https://github.com/tokio-rs/tracing)
-- **命令行**: [Clap](https://github.com/clap-rs/clap)
+- **Web Framework**: [Axum](https://github.com/tokio-rs/axum) 0.8
+- **Async Runtime**: [Tokio](https://tokio.rs/)
+- **HTTP Client**: [Reqwest](https://github.com/seanmonstar/reqwest)
+- **Serialization**: [Serde](https://serde.rs/)
+- **Logging**: [tracing](https://github.com/tokio-rs/tracing)
+- **CLI**: [Clap](https://github.com/clap-rs/clap)
 
 ## License
 
 MIT
 
-## 致谢
+## Acknowledgments
 
-本项目的实现离不开前辈的努力:  
+This project's implementation would not have been possible without the efforts of predecessors:
  - [kiro2api](https://github.com/caidaoli/kiro2api)
  - [proxycast](https://github.com/aiclientproxy/proxycast)
 
-本项目部分逻辑参考了以上的项目, 再次由衷的感谢!
+Parts of this project's logic were referenced from the above projects. Sincere thanks!
