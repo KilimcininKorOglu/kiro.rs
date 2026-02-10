@@ -45,15 +45,15 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 验证必填字段
+    // Validate required fields
     if (!refreshToken.trim()) {
-      toast.error('请输入 Refresh Token')
+      toast.error('Please enter Refresh Token')
       return
     }
 
-    // IdC/Builder-ID/IAM 需要额外字段
+    // IdC/Builder-ID/IAM requires additional fields
     if (authMethod === 'idc' && (!clientId.trim() || !clientSecret.trim())) {
-      toast.error('IdC/Builder-ID/IAM 认证需要填写 Client ID 和 Client Secret')
+      toast.error('IdC/Builder-ID/IAM authentication requires Client ID and Client Secret')
       return
     }
 
@@ -75,7 +75,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
           resetForm()
         },
         onError: (error: unknown) => {
-          toast.error(`添加失败: ${extractErrorMessage(error)}`)
+          toast.error(`Add failed: ${extractErrorMessage(error)}`)
         },
       }
     )
@@ -85,7 +85,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>添加凭据</DialogTitle>
+          <DialogTitle>Add Credential</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
@@ -98,17 +98,17 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               <Input
                 id="refreshToken"
                 type="password"
-                placeholder="请输入 Refresh Token"
+                placeholder="Enter Refresh Token"
                 value={refreshToken}
                 onChange={(e) => setRefreshToken(e.target.value)}
                 disabled={isPending}
               />
             </div>
 
-            {/* 认证方式 */}
+            {/* Auth Method */}
             <div className="space-y-2">
               <label htmlFor="authMethod" className="text-sm font-medium">
-                认证方式
+                Auth Method
               </label>
               <select
                 id="authMethod"
@@ -122,9 +122,9 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               </select>
             </div>
 
-            {/* Region 配置 */}
+            {/* Region Configuration */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Region 配置</label>
+              <label className="text-sm font-medium">Region Configuration</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Input
@@ -146,11 +146,11 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                均可留空使用全局配置。Auth Region 用于 Token 刷新，API Region 用于 API 请求
+                Both can be left empty to use global config. Auth Region is for token refresh, API Region is for API requests.
               </p>
             </div>
 
-            {/* IdC/Builder-ID/IAM 额外字段 */}
+            {/* IdC/Builder-ID/IAM additional fields */}
             {authMethod === 'idc' && (
               <>
                 <div className="space-y-2">
@@ -159,7 +159,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                   </label>
                   <Input
                     id="clientId"
-                    placeholder="请输入 Client ID"
+                    placeholder="Enter Client ID"
                     value={clientId}
                     onChange={(e) => setClientId(e.target.value)}
                     disabled={isPending}
@@ -172,7 +172,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                   <Input
                     id="clientSecret"
                     type="password"
-                    placeholder="请输入 Client Secret"
+                    placeholder="Enter Client Secret"
                     value={clientSecret}
                     onChange={(e) => setClientSecret(e.target.value)}
                     disabled={isPending}
@@ -181,22 +181,22 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               </>
             )}
 
-            {/* 优先级 */}
+            {/* Priority */}
             <div className="space-y-2">
               <label htmlFor="priority" className="text-sm font-medium">
-                优先级
+                Priority
               </label>
               <Input
                 id="priority"
                 type="number"
                 min="0"
-                placeholder="数字越小优先级越高"
+                placeholder="Lower number = higher priority"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
                 disabled={isPending}
               />
               <p className="text-xs text-muted-foreground">
-                数字越小优先级越高，默认为 0
+                Lower number means higher priority, default is 0
               </p>
             </div>
 
@@ -207,13 +207,13 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               </label>
               <Input
                 id="machineId"
-                placeholder="留空使用配置中字段, 否则由刷新Token自动派生"
+                placeholder="Leave empty to use config value or auto-derive from refresh token"
                 value={machineId}
                 onChange={(e) => setMachineId(e.target.value)}
                 disabled={isPending}
               />
               <p className="text-xs text-muted-foreground">
-                可选，64 位十六进制字符串，留空使用配置中字段, 否则由刷新Token自动派生
+                Optional, 64-bit hex string. Leave empty to use config value or auto-derive from refresh token.
               </p>
             </div>
           </div>
@@ -225,10 +225,10 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? '添加中...' : '添加'}
+              {isPending ? 'Adding...' : 'Add'}
             </Button>
           </DialogFooter>
         </form>

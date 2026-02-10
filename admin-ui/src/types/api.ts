@@ -1,4 +1,4 @@
-// 凭据状态响应
+// Credentials status response
 export interface CredentialsStatusResponse {
   total: number
   available: number
@@ -6,7 +6,7 @@ export interface CredentialsStatusResponse {
   credentials: CredentialStatusItem[]
 }
 
-// 单个凭据状态
+// Single credential status
 export interface CredentialStatusItem {
   id: number
   priority: number
@@ -22,7 +22,7 @@ export interface CredentialStatusItem {
   lastUsedAt: string | null
 }
 
-// 余额响应
+// Balance response
 export interface BalanceResponse {
   id: number
   subscriptionTitle: string | null
@@ -33,13 +33,13 @@ export interface BalanceResponse {
   nextResetAt: number | null
 }
 
-// 成功响应
+// Success response
 export interface SuccessResponse {
   success: boolean
   message: string
 }
 
-// 错误响应
+// Error response
 export interface AdminErrorResponse {
   error: {
     type: string
@@ -47,7 +47,7 @@ export interface AdminErrorResponse {
   }
 }
 
-// 请求类型
+// Request types
 export interface SetDisabledRequest {
   disabled: boolean
 }
@@ -56,7 +56,7 @@ export interface SetPriorityRequest {
   priority: number
 }
 
-// 添加凭据请求
+// Add credential request
 export interface AddCredentialRequest {
   refreshToken: string
   authMethod?: 'social' | 'idc'
@@ -68,7 +68,7 @@ export interface AddCredentialRequest {
   machineId?: string
 }
 
-// 添加凭据响应
+// Add credential response
 export interface AddCredentialResponse {
   success: boolean
   message: string

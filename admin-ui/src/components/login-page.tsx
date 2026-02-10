@@ -13,7 +13,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [apiKey, setApiKey] = useState('')
 
   useEffect(() => {
-    // 从 storage 读取保存的 API Key
+    // Read saved API Key from storage
     const savedKey = storage.getApiKey()
     if (savedKey) {
       setApiKey(savedKey)
@@ -37,7 +37,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </div>
           <CardTitle className="text-2xl">Kiro Admin</CardTitle>
           <CardDescription>
-            请输入 Admin API Key 以访问管理面板
+            Enter Admin API Key to access the management panel
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -52,7 +52,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               />
             </div>
             <Button type="submit" className="w-full" disabled={!apiKey.trim()}>
-              登录
+              Login
             </Button>
           </form>
         </CardContent>

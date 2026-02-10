@@ -10,7 +10,7 @@ import type {
   AddCredentialResponse,
 } from '@/types/api'
 
-// 创建 axios 实例
+// Create axios instance
 const api = axios.create({
   baseURL: '/api/admin',
   headers: {
@@ -18,7 +18,7 @@ const api = axios.create({
   },
 })
 
-// 请求拦截器添加 API Key
+// Request interceptor to add API Key
 api.interceptors.request.use((config) => {
   const apiKey = storage.getApiKey()
   if (apiKey) {
@@ -27,13 +27,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// 获取所有凭据状态
+// Get all credentials status
 export async function getCredentials(): Promise<CredentialsStatusResponse> {
   const { data } = await api.get<CredentialsStatusResponse>('/credentials')
   return data
 }
 
-// 设置凭据禁用状态
+// Set credential disabled status
 export async function setCredentialDisabled(
   id: number,
   disabled: boolean
@@ -45,7 +45,7 @@ export async function setCredentialDisabled(
   return data
 }
 
-// 设置凭据优先级
+// Set credential priority
 export async function setCredentialPriority(
   id: number,
   priority: number
@@ -57,7 +57,7 @@ export async function setCredentialPriority(
   return data
 }
 
-// 重置失败计数
+// Reset failure count
 export async function resetCredentialFailure(
   id: number
 ): Promise<SuccessResponse> {
@@ -65,13 +65,13 @@ export async function resetCredentialFailure(
   return data
 }
 
-// 获取凭据余额
+// Get credential balance
 export async function getCredentialBalance(id: number): Promise<BalanceResponse> {
   const { data } = await api.get<BalanceResponse>(`/credentials/${id}/balance`)
   return data
 }
 
-// 添加新凭据
+// Add new credential
 export async function addCredential(
   req: AddCredentialRequest
 ): Promise<AddCredentialResponse> {
@@ -79,19 +79,19 @@ export async function addCredential(
   return data
 }
 
-// 删除凭据
+// Delete credential
 export async function deleteCredential(id: number): Promise<SuccessResponse> {
   const { data } = await api.delete<SuccessResponse>(`/credentials/${id}`)
   return data
 }
 
-// 获取负载均衡模式
+// Get load balancing mode
 export async function getLoadBalancingMode(): Promise<{ mode: 'priority' | 'balanced' }> {
   const { data } = await api.get<{ mode: 'priority' | 'balanced' }>('/config/load-balancing')
   return data
 }
 
-// 设置负载均衡模式
+// Set load balancing mode
 export async function setLoadBalancingMode(mode: 'priority' | 'balanced'): Promise<{ mode: 'priority' | 'balanced' }> {
   const { data } = await api.put<{ mode: 'priority' | 'balanced' }>('/config/load-balancing', { mode })
   return data
