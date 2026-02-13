@@ -627,24 +627,35 @@ fn build_history(req: &MessagesRequest, model_id: &str) -> Result<Vec<Message>, 
 
     // Collect and pair messages
     let mut user_buffer: Vec<&super::types::Message> = Vec::new();
+    let mut assistant_buffer: Vec<&super::types::Message> = Vec::new();
 
     for i in 0..history_end_index {
         let msg = &req.messages[i];
 
         if msg.role == "user" {
+            // First, process accumulated assistant messages
+            if !assistant_buffer.is_empty() {
+                let merged = merge_assistant_messages(&assistant_buffer)?;
+                history.push(Message::Assistant(merged));
+                assistant_buffer.clear();
+            }
             user_buffer.push(msg);
         } else if msg.role == "assistant" {
-            // Encountered assistant, process accumulated user messages
+            // First, process accumulated user messages
             if !user_buffer.is_empty() {
                 let merged_user = merge_user_messages(&user_buffer, model_id)?;
                 history.push(Message::User(merged_user));
                 user_buffer.clear();
-
-                // Add assistant message
-                let assistant = convert_assistant_message(msg)?;
-                history.push(Message::Assistant(assistant));
             }
+            // Accumulate assistant messages (supports consecutive messages)
+            assistant_buffer.push(msg);
         }
+    }
+
+    // Handle trailing accumulated assistant messages
+    if !assistant_buffer.is_empty() {
+        let merged = merge_assistant_messages(&assistant_buffer)?;
+        history.push(Message::Assistant(merged));
     }
 
     // Handle trailing orphaned user messages
@@ -760,6 +771,45 @@ fn convert_assistant_message(
         assistant = assistant.with_tool_uses(tool_uses);
     }
 
+    Ok(HistoryAssistantMessage {
+        assistant_response_message: assistant,
+    })
+}
+
+/// Merge multiple consecutive assistant messages into one
+/// Used to handle consecutive assistant messages caused by network instability (Issue #79)
+fn merge_assistant_messages(
+    messages: &[&super::types::Message],
+) -> Result<HistoryAssistantMessage, ConversionError> {
+    assert!(!messages.is_empty());
+    if messages.len() == 1 {
+        return convert_assistant_message(messages[0]);
+    }
+
+    let mut all_tool_uses: Vec<ToolUseEntry> = Vec::new();
+    let mut content_parts: Vec<String> = Vec::new();
+
+    for msg in messages {
+        let converted = convert_assistant_message(msg)?;
+        let am = converted.assistant_response_message;
+        if !am.content.trim().is_empty() {
+            content_parts.push(am.content);
+        }
+        if let Some(tus) = am.tool_uses {
+            all_tool_uses.extend(tus);
+        }
+    }
+
+    let content = if content_parts.is_empty() && !all_tool_uses.is_empty() {
+        " ".to_string()
+    } else {
+        content_parts.join("\n\n")
+    };
+
+    let mut assistant = AssistantMessage::new(content);
+    if !all_tool_uses.is_empty() {
+        assistant = assistant.with_tool_uses(all_tool_uses);
+    }
     Ok(HistoryAssistantMessage {
         assistant_response_message: assistant,
     })
