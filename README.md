@@ -38,6 +38,7 @@ If you encounter request errors, especially when unable to refresh tokens or rec
   - [3. Start](#3-start)
   - [4. Verify](#4-verify)
   - [Docker](#docker)
+- [OAuth Web Authentication](#oauth-web-authentication)
 - [Configuration Details](#configuration-details)
   - [config.json](#configjson)
   - [credentials.json](#credentialsjson)
@@ -151,6 +152,49 @@ docker-compose up
 ```
 
 You need to mount `config.json` and `credentials.json` into the container. See `docker-compose.yml` for details.
+
+## OAuth Web Authentication
+
+Access the Kiro OAuth web interface at:
+
+```
+http://your-server:8990/v0/oauth/kiro
+```
+
+This provides a browser-based OAuth flow for Kiro (AWS CodeWhisperer) authentication with:
+
+- **AWS Builder ID**: Personal AWS account authentication using device code flow
+- **AWS Identity Center (IDC)**: Organization SSO authentication with custom start URL and region
+- **Token Import**: Import refresh token from Kiro IDE (`~/.kiro/kiro-auth-token.json`)
+- **Manual Refresh**: Refresh all configured tokens with one click
+
+### OAuth Web Endpoints
+
+| Endpoint                   | Method | Description                          |
+|----------------------------|--------|--------------------------------------|
+| `/v0/oauth/kiro`           | GET    | Authentication method selection page |
+| `/v0/oauth/kiro/start`     | GET    | Start OAuth flow                     |
+| `/v0/oauth/kiro/status`    | GET    | Poll session status (JSON)           |
+| `/v0/oauth/kiro/import`    | POST   | Import refresh token                 |
+| `/v0/oauth/kiro/refresh`   | POST   | Manual refresh all tokens            |
+
+### How to Use
+
+1. Open `http://your-server:8990/v0/oauth/kiro` in your browser
+2. Choose an authentication method:
+   - **AWS Builder ID**: Click the button, a new tab opens with AWS login page. Enter the verification code shown on the page.
+   - **AWS Identity Center**: Enter your organization's Start URL and region, then follow the same flow.
+   - **Import Token**: Copy the `refreshToken` from `~/.kiro/kiro-auth-token.json` and paste it.
+3. Once authenticated, the token is automatically saved to `credentials.json`
+
+### Token Import from Kiro IDE
+
+If you have Kiro IDE installed and logged in:
+
+1. Find the token file: `~/.kiro/kiro-auth-token.json`
+2. Copy the `refreshToken` value (starts with `aorAAAAAG...`)
+3. Paste it in the "Import RefreshToken" form on the OAuth web page
+4. Click "Import Token"
 
 ## Configuration Details
 
