@@ -20,7 +20,7 @@ use std::time::Duration;
 use tokio::time::interval;
 use uuid::Uuid;
 
-use super::converter::{ConversionError, convert_request};
+use super::converter::{ConversionError, convert_request, inject_agentic_prompt};
 use super::middleware::AppState;
 use super::stream::{BufferedStreamContext, SseEvent, StreamContext};
 use super::types::{CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse, OutputConfig, Thinking};
@@ -155,6 +155,67 @@ pub async fn get_models() -> impl IntoResponse {
             max_completion_tokens: Some(64_000),
             thinking: Some(true),
         },
+        // Agentic variants - with chunked write system prompt
+        Model {
+            id: "claude-sonnet-4-5-20250929-agentic".to_string(),
+            object: "model".to_string(),
+            created: 1727568000,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Sonnet 4.5 (Agentic)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
+        },
+        Model {
+            id: "claude-opus-4-5-20251101-agentic".to_string(),
+            object: "model".to_string(),
+            created: 1730419200,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Opus 4.5 (Agentic)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
+        },
+        Model {
+            id: "claude-opus-4-6-agentic".to_string(),
+            object: "model".to_string(),
+            created: 1770314400,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Opus 4.6 (Agentic)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(128_000),
+            thinking: Some(true),
+        },
+        Model {
+            id: "claude-opus-4-6-1m-agentic".to_string(),
+            object: "model".to_string(),
+            created: 1770314400,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Opus 4.6 (1M, Agentic)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(1_000_000),
+            max_completion_tokens: Some(128_000),
+            thinking: Some(true),
+        },
+        Model {
+            id: "claude-haiku-4-5-20251001-agentic".to_string(),
+            object: "model".to_string(),
+            created: 1727740800,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Haiku 4.5 (Agentic)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
+        },
     ];
 
     Json(ModelsResponse {
@@ -196,6 +257,18 @@ pub async fn post_messages(
     // Detect if model name contains thinking suffix, if so override thinking config
     let thinking_suffix = state.config.thinking_suffix();
     override_thinking_from_model_name(&mut payload, thinking_suffix);
+
+    // Detect if model name contains agentic suffix, if so inject agentic prompt
+    let is_agentic = detect_and_strip_agentic_suffix(&mut payload);
+    if is_agentic {
+        let current_system = payload
+            .system
+            .as_ref()
+            .map(|msgs| msgs.iter().map(|m| m.text.as_str()).collect::<Vec<_>>().join("\n"))
+            .unwrap_or_default();
+        let new_system = inject_agentic_prompt(&current_system);
+        payload.system = Some(vec![super::types::SystemMessage { text: new_system }]);
+    }
 
     // Check if this is a WebSearch request
     if websearch::has_web_search_tool(&payload) {
@@ -648,6 +721,29 @@ fn override_thinking_from_model_name(payload: &mut MessagesRequest, thinking_suf
     }
 }
 
+/// Detect if model name contains agentic suffix, if so strip it and return true
+///
+/// Returns true if agentic mode should be enabled
+fn detect_and_strip_agentic_suffix(payload: &mut MessagesRequest) -> bool {
+    let model_lower = payload.model.to_lowercase();
+    
+    if !model_lower.ends_with("-agentic") {
+        return false;
+    }
+
+    // Remove suffix from model name
+    let actual_model = payload.model[..payload.model.len() - 8].to_string();
+
+    tracing::info!(
+        original_model = %payload.model,
+        actual_model = %actual_model,
+        "Model name contains agentic suffix, enabling agentic mode"
+    );
+
+    payload.model = actual_model;
+    true
+}
+
 /// POST /v1/messages/count_tokens
 ///
 /// Calculate the token count for messages
@@ -708,6 +804,18 @@ pub async fn post_messages_cc(
     // Detect if model name contains thinking suffix, if so override thinking config
     let thinking_suffix = state.config.thinking_suffix();
     override_thinking_from_model_name(&mut payload, thinking_suffix);
+
+    // Detect if model name contains agentic suffix, if so inject agentic prompt
+    let is_agentic = detect_and_strip_agentic_suffix(&mut payload);
+    if is_agentic {
+        let current_system = payload
+            .system
+            .as_ref()
+            .map(|msgs| msgs.iter().map(|m| m.text.as_str()).collect::<Vec<_>>().join("\n"))
+            .unwrap_or_default();
+        let new_system = inject_agentic_prompt(&current_system);
+        payload.system = Some(vec![super::types::SystemMessage { text: new_system }]);
+    }
 
     // Check if this is a WebSearch request
     if websearch::has_web_search_tool(&payload) {

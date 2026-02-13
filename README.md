@@ -551,22 +551,29 @@ The proxy maps Anthropic model names to Kiro internal model IDs. For Sonnet mode
 
 The `/v1/models` endpoint returns the following models:
 
-| Model ID                              | Display Name                        | Context | Thinking |
-|---------------------------------------|-------------------------------------|---------|----------|
-| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5                   | 200K    | No       |
-| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking)        | 200K    | Yes      |
-| `claude-opus-4-5-20251101`            | Claude Opus 4.5                     | 200K    | No       |
-| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)          | 200K    | Yes      |
-| `claude-opus-4-6`                     | Claude Opus 4.6                     | 200K    | No       |
-| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)          | 200K    | Yes      |
-| `claude-opus-4-6-1m`                  | Claude Opus 4.6 (1M Context)        | 1M      | No       |
-| `claude-opus-4-6-1m-thinking`         | Claude Opus 4.6 (1M Context, Thinking) | 1M   | Yes      |
-| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5                    | 200K    | No       |
-| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)         | 200K    | Yes      |
+| Model ID                              | Display Name                           | Context | Thinking |
+|---------------------------------------|----------------------------------------|---------|----------|
+| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5                      | 200K    | No       |
+| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking)           | 200K    | Yes      |
+| `claude-sonnet-4-5-20250929-agentic`  | Claude Sonnet 4.5 (Agentic)            | 200K    | No       |
+| `claude-opus-4-5-20251101`            | Claude Opus 4.5                        | 200K    | No       |
+| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)             | 200K    | Yes      |
+| `claude-opus-4-5-20251101-agentic`    | Claude Opus 4.5 (Agentic)              | 200K    | No       |
+| `claude-opus-4-6`                     | Claude Opus 4.6                        | 200K    | No       |
+| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)             | 200K    | Yes      |
+| `claude-opus-4-6-agentic`             | Claude Opus 4.6 (Agentic)              | 200K    | No       |
+| `claude-opus-4-6-1m`                  | Claude Opus 4.6 (1M Context)           | 1M      | No       |
+| `claude-opus-4-6-1m-thinking`         | Claude Opus 4.6 (1M Context, Thinking) | 1M      | Yes      |
+| `claude-opus-4-6-1m-agentic`          | Claude Opus 4.6 (1M, Agentic)          | 1M      | No       |
+| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5                       | 200K    | No       |
+| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)            | 200K    | Yes      |
+| `claude-haiku-4-5-20251001-agentic`   | Claude Haiku 4.5 (Agentic)             | 200K    | No       |
 
 > Note: Models ending with `-thinking` automatically enable extended thinking mode with a 20,000 token budget (max 128,000).
 
 > Note: Opus 4.6 `-1m` variants support 1 million token context window for large codebases and projects.
+
+> Note: Models ending with `-agentic` inject a system prompt that guides Claude to write files in chunks, preventing truncation issues with large file operations.
 
 ## Error Enhancement
 
