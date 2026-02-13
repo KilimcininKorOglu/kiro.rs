@@ -492,6 +492,23 @@ The proxy maps Anthropic model names to Kiro internal model IDs. For Sonnet mode
 | `*opus*` (others)                  | `claude-opus-4.6`                       |
 | `*haiku*`                          | `claude-haiku-4.5`                      |
 
+### Available Models
+
+The `/v1/models` endpoint returns the following models:
+
+| Model ID                              | Display Name                  | Thinking |
+|---------------------------------------|-------------------------------|----------|
+| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5             | No       |
+| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking)  | Yes      |
+| `claude-opus-4-5-20251101`            | Claude Opus 4.5               | No       |
+| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)    | Yes      |
+| `claude-opus-4-6`                     | Claude Opus 4.6               | No       |
+| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)    | Yes      |
+| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5              | No       |
+| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)   | Yes      |
+
+> Note: Models ending with `-thinking` automatically enable extended thinking mode with a 20,000 token budget.
+
 ## Error Enhancement
 
 The proxy enhances cryptic Kiro API error messages with user-friendly explanations:
