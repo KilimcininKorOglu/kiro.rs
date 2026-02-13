@@ -43,9 +43,8 @@ pub fn enhance_kiro_error(error_json: &Value) -> KiroErrorInfo {
         "CONTENT_LENGTH_EXCEEDS_THRESHOLD" => {
             "Model context limit reached. Conversation size exceeds model capacity.".to_string()
         }
-        "MONTHLY_REQUEST_LIMIT_REACHED" => {
-            "Monthly usage limit reached. Please try again next month or upgrade your plan."
-                .to_string()
+        "MONTHLY_REQUEST_LIMIT_REACHED" | "MONTHLY_REQUEST_COUNT" => {
+            "Monthly request limit exceeded. Account has reached its monthly quota.".to_string()
         }
         "RATE_LIMIT_EXCEEDED" => {
             "Rate limit exceeded. Please wait a moment before retrying.".to_string()
@@ -104,7 +103,23 @@ mod tests {
 
         let error_info = enhance_kiro_error(&error_json);
 
-        assert!(error_info.user_message.contains("Monthly usage limit"));
+        assert!(error_info.user_message.contains("Monthly request limit"));
+    }
+
+    #[test]
+    fn test_monthly_request_count_error_enhanced() {
+        let error_json = json!({
+            "message": "You have reached the limit.",
+            "reason": "MONTHLY_REQUEST_COUNT"
+        });
+
+        let error_info = enhance_kiro_error(&error_json);
+
+        assert_eq!(
+            error_info.user_message,
+            "Monthly request limit exceeded. Account has reached its monthly quota."
+        );
+        assert_eq!(error_info.reason, "MONTHLY_REQUEST_COUNT");
     }
 
     #[test]
