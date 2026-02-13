@@ -9,7 +9,7 @@ services:
     volumes:
       - ./config:/app/config
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=debug
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8990/v1/models"]
       interval: 30s

@@ -30,12 +30,15 @@ const MAX_TOTAL_RETRIES: usize = 9;
 fn enhance_error_message(body: &str) -> String {
     if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(body) {
         let error_info = enhance_kiro_error(&error_json);
-        tracing::debug!(
+        // Log enhanced message for debugging, but return original for client compatibility
+        // (Claude Code expects original Kiro messages for auto-compress triggers)
+        tracing::info!(
             original_message = %error_info.original_message,
             reason = %error_info.reason,
-            "Kiro API error enhanced"
+            enhanced_message = %error_info.user_message,
+            "Kiro API error"
         );
-        error_info.user_message
+        error_info.original_message
     } else {
         body.to_string()
     }
