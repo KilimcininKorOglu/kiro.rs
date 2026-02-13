@@ -223,6 +223,7 @@ If you have Kiro IDE installed and logged in:
 | `loadBalancingMode`   | string | `priority`  | Load balancing mode: `priority` (by priority) or `balanced` (even dist.)      |
 | `thinkingSuffix`      | string | `-thinking` | Model name suffix to trigger thinking mode (e.g., `claude-sonnet-4-thinking`) |
 | `thinkingFormat`      | string | `thinking`  | Thinking output format: `thinking`, `think`, or `reasoning_content`           |
+| `maxRequestBodyBytes` | number | `400000`    | Maximum request body size in bytes (0 = unlimited)                            |
 
 Full configuration example:
 
@@ -248,7 +249,8 @@ Full configuration example:
    "adminApiKey": "sk-admin-your-secret-key",
    "loadBalancingMode": "priority",
    "thinkingSuffix": "-thinking",
-   "thinkingFormat": "thinking"
+   "thinkingFormat": "thinking",
+   "maxRequestBodyBytes": 400000
 }
 ```
 
