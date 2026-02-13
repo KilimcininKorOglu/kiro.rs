@@ -52,3 +52,6 @@ credentials.json
 Dockerfile
 .dockerignore
 docker-compose*.yml
+
+# Temp directory
+temp/
