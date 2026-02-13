@@ -173,6 +173,8 @@ You need to mount `config.json` and `credentials.json` into the container. See `
 | `proxyPassword`       | string | -           | Proxy password                                                           |
 | `adminApiKey`         | string | -           | Admin API key, enables credential management API and web UI when set     |
 | `loadBalancingMode`   | string | `priority`  | Load balancing mode: `priority` (by priority) or `balanced` (even dist.) |
+| `thinkingSuffix`      | string | `-thinking` | Model name suffix to trigger thinking mode (e.g., `claude-sonnet-4-thinking`) |
+| `thinkingFormat`      | string | `thinking`  | Thinking output format: `thinking`, `think`, or `reasoning_content`      |
 
 Full configuration example:
 
@@ -196,7 +198,9 @@ Full configuration example:
    "proxyUsername": "user",
    "proxyPassword": "pass",
    "adminApiKey": "sk-admin-your-secret-key",
-   "loadBalancingMode": "priority"
+   "loadBalancingMode": "priority",
+   "thinkingSuffix": "-thinking",
+   "thinkingFormat": "thinking"
 }
 ```
 
@@ -339,6 +343,28 @@ Supports Claude's extended thinking feature:
 }
 ```
 
+#### Thinking Suffix Trigger
+
+You can also enable thinking mode by appending a suffix to the model name (configurable via `thinkingSuffix` in config):
+
+```json
+{
+  "model": "claude-sonnet-4-thinking",
+  "max_tokens": 16000,
+  "messages": [...]
+}
+```
+
+When the model name ends with the configured suffix (default: `-thinking`):
+- Thinking mode is automatically enabled with default budget
+- The suffix is stripped from the model name before sending to Kiro API
+- A system prompt is injected to guide the model's thinking process
+
+The `thinkingFormat` config option controls the output format:
+- `thinking` - Standard Anthropic thinking format (default)
+- `think` - Alternative thinking format
+- `reasoning_content` - OpenAI-compatible reasoning format
+
 ### Tool Calling
 
 Full support for Anthropic's tool use feature:
@@ -366,12 +392,31 @@ Full support for Anthropic's tool use feature:
 
 ## Model Mapping
 
-| Anthropic Model            | Kiro Model         |
-|----------------------------|--------------------|
-| `*sonnet*`                 | `claude-sonnet-4.5`|
-| `*opus*` (with 4.5/4-5)    | `claude-opus-4.5`  |
-| `*opus*` (others)          | `claude-opus-4.6`  |
-| `*haiku*`                  | `claude-haiku-4.5` |
+The proxy maps Anthropic model names to Kiro internal model IDs. For Sonnet models, version-specific mapping is used:
+
+| Anthropic Model                    | Kiro Internal Model ID                  |
+|------------------------------------|-----------------------------------------|
+| `*sonnet*4.5*` or `*sonnet*4-5*`   | `CLAUDE_SONNET_4_5_20250929_V1_0`       |
+| `*sonnet*4*` (not 4.5)             | `CLAUDE_SONNET_4_20250514_V1_0`         |
+| `*sonnet*3.7*` or `*sonnet*3-7*`   | `CLAUDE_3_7_SONNET_20250219_V1_0`       |
+| `*sonnet*` (other)                 | `CLAUDE_SONNET_4_5_20250929_V1_0`       |
+| `*opus*` (with 4.5/4-5)            | `claude-opus-4.5`                       |
+| `*opus*` (others)                  | `claude-opus-4.6`                       |
+| `*haiku*`                          | `claude-haiku-4.5`                      |
+
+## Error Enhancement
+
+The proxy enhances cryptic Kiro API error messages with user-friendly explanations:
+
+| Error Code                       | User-Friendly Message                                                    |
+|----------------------------------|--------------------------------------------------------------------------|
+| `CONTENT_LENGTH_EXCEEDS_THRESHOLD` | Content length exceeds the maximum allowed limit. Please reduce your input size. |
+| `MONTHLY_REQUEST_LIMIT_REACHED`  | Monthly request limit reached. Please wait until next month or upgrade your plan. |
+| `MONTHLY_REQUEST_COUNT`          | Monthly request count limit reached. Please wait until next month or upgrade your plan. |
+| `RATE_LIMIT_EXCEEDED`            | Rate limit exceeded. Please slow down your requests and try again.       |
+| `SERVICE_UNAVAILABLE`            | Kiro service is temporarily unavailable. Please try again later.         |
+| `THROTTLING_EXCEPTION`           | Request throttled due to high traffic. Please wait a moment and retry.   |
+| `VALIDATION_EXCEPTION`           | Request validation failed. Please check your input parameters.           |
 
 ## Admin (Optional)
 
@@ -420,6 +465,7 @@ kiro-rs/
 |   |   +-- provider.rs         # API provider
 |   |   +-- token_manager.rs    # Token management
 |   |   +-- machine_id.rs       # Device fingerprint generation
+|   |   +-- errors.rs           # Error enhancement module
 |   |   +-- model/              # Data models
 |   |   |   +-- credentials.rs  # OAuth credentials
 |   |   |   +-- events/         # Response event types
