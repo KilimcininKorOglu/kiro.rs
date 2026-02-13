@@ -41,6 +41,9 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Sonnet 4.5".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
         },
         Model {
             id: "claude-sonnet-4-5-20250929-thinking".to_string(),
@@ -50,6 +53,9 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Sonnet 4.5 (Thinking)".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
         },
         Model {
             id: "claude-opus-4-5-20251101".to_string(),
@@ -59,6 +65,9 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Opus 4.5".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
         },
         Model {
             id: "claude-opus-4-5-20251101-thinking".to_string(),
@@ -68,7 +77,11 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Opus 4.5 (Thinking)".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
         },
+        // Opus 4.6 - 200K context (standard)
         Model {
             id: "claude-opus-4-6".to_string(),
             object: "model".to_string(),
@@ -77,6 +90,9 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Opus 4.6".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(128_000),
+            thinking: Some(true),
         },
         Model {
             id: "claude-opus-4-6-thinking".to_string(),
@@ -86,6 +102,34 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Opus 4.6 (Thinking)".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(128_000),
+            thinking: Some(true),
+        },
+        // Opus 4.6 - 1M context (large projects)
+        Model {
+            id: "claude-opus-4-6-1m".to_string(),
+            object: "model".to_string(),
+            created: 1770314400,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Opus 4.6 (1M Context)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(1_000_000),
+            max_completion_tokens: Some(128_000),
+            thinking: Some(true),
+        },
+        Model {
+            id: "claude-opus-4-6-1m-thinking".to_string(),
+            object: "model".to_string(),
+            created: 1770314400,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Opus 4.6 (1M Context, Thinking)".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+            context_length: Some(1_000_000),
+            max_completion_tokens: Some(128_000),
+            thinking: Some(true),
         },
         Model {
             id: "claude-haiku-4-5-20251001".to_string(),
@@ -95,6 +139,9 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Haiku 4.5".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
         },
         Model {
             id: "claude-haiku-4-5-20251001-thinking".to_string(),
@@ -104,6 +151,9 @@ pub async fn get_models() -> impl IntoResponse {
             display_name: "Claude Haiku 4.5 (Thinking)".to_string(),
             model_type: "chat".to_string(),
             max_tokens: 32000,
+            context_length: Some(200_000),
+            max_completion_tokens: Some(64_000),
+            thinking: Some(true),
         },
     ];
 

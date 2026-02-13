@@ -551,18 +551,22 @@ The proxy maps Anthropic model names to Kiro internal model IDs. For Sonnet mode
 
 The `/v1/models` endpoint returns the following models:
 
-| Model ID                              | Display Name                 | Thinking |
-|---------------------------------------|------------------------------|----------|
-| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5            | No       |
-| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking) | Yes      |
-| `claude-opus-4-5-20251101`            | Claude Opus 4.5              | No       |
-| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)   | Yes      |
-| `claude-opus-4-6`                     | Claude Opus 4.6              | No       |
-| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)   | Yes      |
-| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5             | No       |
-| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)  | Yes      |
+| Model ID                              | Display Name                        | Context | Thinking |
+|---------------------------------------|-------------------------------------|---------|----------|
+| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5                   | 200K    | No       |
+| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking)        | 200K    | Yes      |
+| `claude-opus-4-5-20251101`            | Claude Opus 4.5                     | 200K    | No       |
+| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)          | 200K    | Yes      |
+| `claude-opus-4-6`                     | Claude Opus 4.6                     | 200K    | No       |
+| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)          | 200K    | Yes      |
+| `claude-opus-4-6-1m`                  | Claude Opus 4.6 (1M Context)        | 1M      | No       |
+| `claude-opus-4-6-1m-thinking`         | Claude Opus 4.6 (1M Context, Thinking) | 1M   | Yes      |
+| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5                    | 200K    | No       |
+| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)         | 200K    | Yes      |
 
-> Note: Models ending with `-thinking` automatically enable extended thinking mode with a 20,000 token budget.
+> Note: Models ending with `-thinking` automatically enable extended thinking mode with a 20,000 token budget (max 128,000).
+
+> Note: Opus 4.6 `-1m` variants support 1 million token context window for large codebases and projects.
 
 ## Error Enhancement
 
@@ -621,6 +625,8 @@ kiro-rs/
 |   |   +-- converter.rs        # Protocol converter
 |   |   +-- stream.rs           # Streaming response handling
 |   |   +-- websearch.rs        # WebSearch tool handling
+|   |   +-- tool_compression.rs # Tool payload compression
+|   |   +-- truncation.rs       # Tool call truncation detection
 |   +-- kiro/                   # Kiro API client
 |   |   +-- provider.rs         # API provider
 |   |   +-- token_manager.rs    # Token management
