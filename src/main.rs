@@ -106,6 +106,7 @@ async fn main() {
         &api_key,
         Some(kiro_provider),
         first_credentials.profile_arn.clone(),
+        config.clone(),
     );
 
     // Build Admin API router (if non-empty admin_api_key is configured)
