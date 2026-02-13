@@ -152,7 +152,9 @@ async fn main() {
 
     // Start server
     let addr = format!("{}:{}", config.host, config.port);
-    tracing::info!("Starting Anthropic API endpoint: {}", addr);
+    let version = env!("CARGO_PKG_VERSION");
+    tracing::info!("kiro-rs v{} starting", version);
+    tracing::info!("Anthropic API endpoint: {}", addr);
     tracing::info!("API Key: {}***", &api_key[..(api_key.len() / 2)]);
     tracing::info!("Available APIs:");
     tracing::info!("  GET  /v1/models");
