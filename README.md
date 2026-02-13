@@ -180,6 +180,15 @@ This provides a browser-based OAuth flow for Kiro (AWS CodeWhisperer) authentica
 
 ### How to Use
 
+**Option 1: Via Admin UI (Recommended)**
+
+1. Open Admin UI at `http://your-server:8990/admin`
+2. Click "Add Credential" button
+3. Click "Login via Browser (Recommended)" button
+4. Follow the OAuth flow in the new window
+
+**Option 2: Direct URL**
+
 1. Open `http://your-server:8990/v0/oauth/kiro` in your browser
 2. Choose an authentication method:
    - **AWS Builder ID**: Click the button, a new tab opens with AWS login page. Enter the verification code shown on the page.
