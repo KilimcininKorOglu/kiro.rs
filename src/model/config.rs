@@ -100,6 +100,10 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_format: Option<String>,
 
+    /// Maximum request body size in bytes (0 = unlimited, default: 400000)
+    #[serde(default = "default_max_request_body_bytes")]
+    pub max_request_body_bytes: usize,
+
     /// Config file path (runtime metadata, not written to JSON)
     #[serde(skip)]
     config_path: Option<PathBuf>,
@@ -142,6 +146,10 @@ fn default_load_balancing_mode() -> String {
     "priority".to_string()
 }
 
+fn default_max_request_body_bytes() -> usize {
+    400_000
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -166,6 +174,7 @@ impl Default for Config {
             load_balancing_mode: default_load_balancing_mode(),
             thinking_suffix: None,
             thinking_format: None,
+            max_request_body_bytes: default_max_request_body_bytes(),
             config_path: None,
         }
     }

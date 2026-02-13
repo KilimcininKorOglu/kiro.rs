@@ -33,6 +33,18 @@ use super::websearch;
 fn convert_kiro_error_to_response(error_message: &str) -> Response {
     let error_lower = error_message.to_lowercase();
     
+    // Check for quota exhausted errors (all credentials used up)
+    if error_lower.contains("all credentials exhausted") || error_lower.contains("credentials quota") {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ErrorResponse::new(
+                "rate_limit_error",
+                "All credentials quota exhausted. Please wait for quota reset or add new credentials.",
+            )),
+        )
+            .into_response();
+    }
+    
     // Check for context/content length errors - these should trigger client compress
     if error_lower.contains("improperly formed")
         || error_lower.contains("content length")
@@ -392,6 +404,26 @@ pub async fn post_messages(
                 .into_response();
         }
     };
+
+    // Request body size pre-check
+    let max_body = state.config.max_request_body_bytes;
+    if max_body > 0 && request_body.len() > max_body {
+        tracing::warn!(
+            request_body_bytes = request_body.len(),
+            threshold = max_body,
+            "Request too large ({} bytes, limit {}). Reduce conversation history or tool output.",
+            request_body.len(),
+            max_body
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new(
+                "invalid_request_error",
+                "Input is too long for model context window.",
+            )),
+        )
+            .into_response();
+    }
 
     tracing::debug!("Kiro request body: {}", request_body);
 
@@ -933,6 +965,26 @@ pub async fn post_messages_cc(
                 .into_response();
         }
     };
+
+    // Request body size pre-check
+    let max_body = state.config.max_request_body_bytes;
+    if max_body > 0 && request_body.len() > max_body {
+        tracing::warn!(
+            request_body_bytes = request_body.len(),
+            threshold = max_body,
+            "Request too large ({} bytes, limit {}). Reduce conversation history or tool output.",
+            request_body.len(),
+            max_body
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new(
+                "invalid_request_error",
+                "Input is too long for model context window.",
+            )),
+        )
+            .into_response();
+    }
 
     tracing::debug!("Kiro request body: {}", request_body);
 
