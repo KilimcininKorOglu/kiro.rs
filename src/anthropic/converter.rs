@@ -29,15 +29,27 @@ Complete all chunked operations without commentary.";
 
 /// Model mapping: Map Anthropic model names to Kiro model IDs
 ///
-/// As per user requirements:
-/// - All sonnet → claude-sonnet-4.5
-/// - All opus → claude-opus-4.5
-/// - All haiku → claude-haiku-4.5
+/// Model mapping with version-specific internal IDs:
+/// - Sonnet 4.5 → CLAUDE_SONNET_4_5_20250929_V1_0
+/// - Sonnet 4 → CLAUDE_SONNET_4_20250514_V1_0
+/// - Sonnet 3.7 → CLAUDE_3_7_SONNET_20250219_V1_0
+/// - Other sonnet → claude-sonnet-4.5
+/// - Opus 4.5 → claude-opus-4.5
+/// - Opus (other) → claude-opus-4.6
+/// - Haiku → claude-haiku-4.5
 pub fn map_model(model: &str) -> Option<String> {
     let model_lower = model.to_lowercase();
 
     if model_lower.contains("sonnet") {
-        Some("claude-sonnet-4.5".to_string())
+        if model_lower.contains("4-5") || model_lower.contains("4.5") {
+            Some("CLAUDE_SONNET_4_5_20250929_V1_0".to_string())
+        } else if model_lower.contains("sonnet-4") || model_lower.contains("sonnet_4") {
+            Some("CLAUDE_SONNET_4_20250514_V1_0".to_string())
+        } else if model_lower.contains("3-7") || model_lower.contains("3.7") {
+            Some("CLAUDE_3_7_SONNET_20250219_V1_0".to_string())
+        } else {
+            Some("claude-sonnet-4.5".to_string())
+        }
     } else if model_lower.contains("opus") {
         if model_lower.contains("4-5") || model_lower.contains("4.5") {
             Some("claude-opus-4.5".to_string())
@@ -714,16 +726,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_map_model_sonnet() {
-        assert!(
-            map_model("claude-sonnet-4-20250514")
-                .unwrap()
-                .contains("sonnet")
+    fn test_map_model_sonnet_4() {
+        // Sonnet 4 should map to CLAUDE_SONNET_4_20250514_V1_0
+        assert_eq!(
+            map_model("claude-sonnet-4-20250514"),
+            Some("CLAUDE_SONNET_4_20250514_V1_0".to_string())
         );
-        assert!(
-            map_model("claude-3-5-sonnet-20241022")
-                .unwrap()
-                .contains("sonnet")
+    }
+
+    #[test]
+    fn test_map_model_sonnet_4_5() {
+        // Sonnet 4.5 should map to CLAUDE_SONNET_4_5_20250929_V1_0
+        assert_eq!(
+            map_model("claude-sonnet-4-5-20250929"),
+            Some("CLAUDE_SONNET_4_5_20250929_V1_0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_map_model_sonnet_3_7() {
+        // Sonnet 3.7 should map to CLAUDE_3_7_SONNET_20250219_V1_0
+        assert_eq!(
+            map_model("claude-3-7-sonnet-20250219"),
+            Some("CLAUDE_3_7_SONNET_20250219_V1_0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_map_model_sonnet_legacy() {
+        // Legacy sonnet (3.5) should fallback to claude-sonnet-4.5
+        assert_eq!(
+            map_model("claude-3-5-sonnet-20241022"),
+            Some("claude-sonnet-4.5".to_string())
         );
     }
 
@@ -752,9 +786,9 @@ mod tests {
 
     #[test]
     fn test_map_model_thinking_suffix_sonnet() {
-        // thinking suffix should not affect sonnet model mapping
+        // thinking suffix should not affect sonnet 4.5 model mapping
         let result = map_model("claude-sonnet-4-5-20250929-thinking");
-        assert_eq!(result, Some("claude-sonnet-4.5".to_string()));
+        assert_eq!(result, Some("CLAUDE_SONNET_4_5_20250929_V1_0".to_string()));
     }
 
     #[test]
