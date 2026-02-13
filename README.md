@@ -156,29 +156,29 @@ You need to mount `config.json` and `credentials.json` into the container. See `
 
 ### config.json
 
-| Field                 | Type   | Default     | Description                                                              |
-|-----------------------|--------|-------------|--------------------------------------------------------------------------|
-| `host`                | string | `127.0.0.1` | Service listen address                                                   |
-| `port`                | number | `8080`      | Service listen port                                                      |
-| `apiKey`              | string | -           | Custom API key (for client authentication, required)                     |
-| `region`              | string | `us-east-1` | AWS region                                                               |
-| `authRegion`          | string | -           | Auth Region (for token refresh), falls back to region if not configured  |
-| `apiRegion`           | string | -           | API Region (for API requests), falls back to region if not configured    |
-| `kiroVersion`         | string | `0.9.2`     | Kiro version number                                                      |
-| `machineId`           | string | -           | Custom machine ID (64-bit hex), auto-generated if not defined            |
-| `systemVersion`       | string | random      | System version identifier                                                |
-| `nodeVersion`         | string | `22.21.1`   | Node.js version identifier                                               |
-| `tlsBackend`          | string | `rustls`    | TLS backend: `rustls` or `native-tls`                                    |
-| `countTokensApiUrl`   | string | -           | External count_tokens API URL                                            |
-| `countTokensApiKey`   | string | -           | External count_tokens API key                                            |
-| `countTokensAuthType` | string | `x-api-key` | External API auth type: `x-api-key` or `bearer`                          |
-| `proxyUrl`            | string | -           | HTTP/SOCKS5 proxy URL                                                    |
-| `proxyUsername`       | string | -           | Proxy username                                                           |
-| `proxyPassword`       | string | -           | Proxy password                                                           |
-| `adminApiKey`         | string | -           | Admin API key, enables credential management API and web UI when set     |
-| `loadBalancingMode`   | string | `priority`  | Load balancing mode: `priority` (by priority) or `balanced` (even dist.) |
+| Field                 | Type   | Default     | Description                                                                   |
+|-----------------------|--------|-------------|-------------------------------------------------------------------------------|
+| `host`                | string | `127.0.0.1` | Service listen address                                                        |
+| `port`                | number | `8080`      | Service listen port                                                           |
+| `apiKey`              | string | -           | Custom API key (for client authentication, required)                          |
+| `region`              | string | `us-east-1` | AWS region                                                                    |
+| `authRegion`          | string | -           | Auth Region (for token refresh), falls back to region if not configured       |
+| `apiRegion`           | string | -           | API Region (for API requests), falls back to region if not configured         |
+| `kiroVersion`         | string | `0.9.2`     | Kiro version number                                                           |
+| `machineId`           | string | -           | Custom machine ID (64-bit hex), auto-generated if not defined                 |
+| `systemVersion`       | string | random      | System version identifier                                                     |
+| `nodeVersion`         | string | `22.21.1`   | Node.js version identifier                                                    |
+| `tlsBackend`          | string | `rustls`    | TLS backend: `rustls` or `native-tls`                                         |
+| `countTokensApiUrl`   | string | -           | External count_tokens API URL                                                 |
+| `countTokensApiKey`   | string | -           | External count_tokens API key                                                 |
+| `countTokensAuthType` | string | `x-api-key` | External API auth type: `x-api-key` or `bearer`                               |
+| `proxyUrl`            | string | -           | HTTP/SOCKS5 proxy URL                                                         |
+| `proxyUsername`       | string | -           | Proxy username                                                                |
+| `proxyPassword`       | string | -           | Proxy password                                                                |
+| `adminApiKey`         | string | -           | Admin API key, enables credential management API and web UI when set          |
+| `loadBalancingMode`   | string | `priority`  | Load balancing mode: `priority` (by priority) or `balanced` (even dist.)      |
 | `thinkingSuffix`      | string | `-thinking` | Model name suffix to trigger thinking mode (e.g., `claude-sonnet-4-thinking`) |
-| `thinkingFormat`      | string | `thinking`  | Thinking output format: `thinking`, `think`, or `reasoning_content`      |
+| `thinkingFormat`      | string | `thinking`  | Thinking output format: `thinking`, `think`, or `reasoning_content`           |
 
 Full configuration example:
 
@@ -214,22 +214,22 @@ Supports single object format (backward compatible) or array format (multi-crede
 
 #### Field Description
 
-| Field          | Type   | Description                                                                 |
-|----------------|--------|-----------------------------------------------------------------------------|
-| `id`           | number | Unique credential ID (optional, only for Admin API management)              |
-| `accessToken`  | string | OAuth access token (optional, auto-refreshed)                               |
-| `refreshToken` | string | OAuth refresh token                                                         |
-| `profileArn`   | string | AWS Profile ARN (optional, returned on login)                               |
-| `expiresAt`    | string | Token expiration time (RFC3339)                                             |
-| `authMethod`   | string | Authentication method: `social` or `idc`                                    |
-| `clientId`     | string | IdC login client ID (required for IdC auth)                                 |
-| `clientSecret` | string | IdC login client secret (required for IdC auth)                             |
-| `priority`     | number | Credential priority, lower number = higher priority, default is 0           |
-| `region`       | string | Credential-level Auth Region, compatibility field                           |
-| `authRegion`   | string | Credential-level Auth Region for token refresh, falls back to region        |
-| `apiRegion`    | string | Credential-level API Region for API requests                                |
-| `machineId`    | string | Credential-level machine ID (64-bit hex)                                    |
-| `email`        | string | User email (optional, obtained from API)                                    |
+| Field          | Type   | Description                                                          |
+|----------------|--------|----------------------------------------------------------------------|
+| `id`           | number | Unique credential ID (optional, only for Admin API management)       |
+| `accessToken`  | string | OAuth access token (optional, auto-refreshed)                        |
+| `refreshToken` | string | OAuth refresh token                                                  |
+| `profileArn`   | string | AWS Profile ARN (optional, returned on login)                        |
+| `expiresAt`    | string | Token expiration time (RFC3339)                                      |
+| `authMethod`   | string | Authentication method: `social` or `idc`                             |
+| `clientId`     | string | IdC login client ID (required for IdC auth)                          |
+| `clientSecret` | string | IdC login client secret (required for IdC auth)                      |
+| `priority`     | number | Credential priority, lower number = higher priority, default is 0    |
+| `region`       | string | Credential-level Auth Region, compatibility field                    |
+| `authRegion`   | string | Credential-level Auth Region for token refresh, falls back to region |
+| `apiRegion`    | string | Credential-level API Region for API requests                         |
+| `machineId`    | string | Credential-level machine ID (64-bit hex)                             |
+| `email`        | string | User email (optional, obtained from API)                             |
 
 Notes:
 - IdC / Builder-ID / IAM are treated as the same login method in this project; use `authMethod: "idc"` for configuration
@@ -356,12 +356,12 @@ with client.messages.stream(
 
 Any tool that supports custom Anthropic API endpoints can be configured to use kiro-rs:
 
-| Tool       | Configuration                                                                 |
-|------------|-------------------------------------------------------------------------------|
-| Cursor     | Settings > Models > Anthropic API URL: `http://127.0.0.1:8990`                |
-| Cline      | Extension Settings > API Provider > Base URL: `http://127.0.0.1:8990`         |
-| Continue   | `~/.continue/config.json` > models > apiBase: `http://127.0.0.1:8990`         |
-| Roo Code   | Settings > API Configuration > Base URL: `http://127.0.0.1:8990`              |
+| Tool     | Configuration                                                         |
+|----------|-----------------------------------------------------------------------|
+| Cursor   | Settings > Models > Anthropic API URL: `http://127.0.0.1:8990`        |
+| Cline    | Extension Settings > API Provider > Base URL: `http://127.0.0.1:8990` |
+| Continue | `~/.continue/config.json` > models > apiBase: `http://127.0.0.1:8990` |
+| Roo Code | Settings > API Configuration > Base URL: `http://127.0.0.1:8990`      |
 
 ## API Endpoints
 
@@ -375,10 +375,10 @@ Any tool that supports custom Anthropic API endpoints can be configured to use k
 
 ### Claude Code Compatible Endpoints (/cc/v1)
 
-| Endpoint                       | Method | Description                                          |
-|--------------------------------|--------|------------------------------------------------------|
-| `/cc/v1/messages`              | POST   | Create message (buffered mode, accurate input_tokens)|
-| `/cc/v1/messages/count_tokens` | POST   | Estimate token count (same as `/v1`)                 |
+| Endpoint                       | Method | Description                                           |
+|--------------------------------|--------|-------------------------------------------------------|
+| `/cc/v1/messages`              | POST   | Create message (buffered mode, accurate input_tokens) |
+| `/cc/v1/messages/count_tokens` | POST   | Estimate token count (same as `/v1`)                  |
 
 > **Difference between `/cc/v1/messages` and `/v1/messages`**:
 > - `/v1/messages`: Real-time streaming, `input_tokens` in `message_start` is an estimate
@@ -416,18 +416,18 @@ This feature allows you to enable thinking mode simply by adding a suffix to the
 
 **Configuration Options:**
 
-| Option           | Default      | Description                                              |
-|------------------|--------------|----------------------------------------------------------|
-| `thinkingSuffix` | `-thinking`  | The suffix to trigger thinking mode (e.g., `-think`, `-reason`) |
-| `thinkingFormat` | `thinking`   | Output format for the thinking content                   |
+| Option           | Default     | Description                                                     |
+|------------------|-------------|-----------------------------------------------------------------|
+| `thinkingSuffix` | `-thinking` | The suffix to trigger thinking mode (e.g., `-think`, `-reason`) |
+| `thinkingFormat` | `thinking`  | Output format for the thinking content                          |
 
 **thinkingFormat Values:**
 
-| Value              | Description                                                      | Use Case                          |
-|--------------------|------------------------------------------------------------------|-----------------------------------|
-| `thinking`         | Wraps thinking in `<thinking>...</thinking>` tags                | Standard Anthropic format         |
-| `think`            | Wraps thinking in `<think>...</think>` tags                      | Alternative tag format            |
-| `reasoning_content`| Returns thinking as separate `reasoning_content` field           | OpenAI/DeepSeek compatible format |
+| Value               | Description                                            | Use Case                          |
+|---------------------|--------------------------------------------------------|-----------------------------------|
+| `thinking`          | Wraps thinking in `<thinking>...</thinking>` tags      | Standard Anthropic format         |
+| `think`             | Wraps thinking in `<think>...</think>` tags            | Alternative tag format            |
+| `reasoning_content` | Returns thinking as separate `reasoning_content` field | OpenAI/DeepSeek compatible format |
 
 **Example Usage:**
 
@@ -482,30 +482,30 @@ Full support for Anthropic's tool use feature:
 
 The proxy maps Anthropic model names to Kiro internal model IDs. For Sonnet models, version-specific mapping is used:
 
-| Anthropic Model                    | Kiro Internal Model ID                  |
-|------------------------------------|-----------------------------------------|
-| `*sonnet*4.5*` or `*sonnet*4-5*`   | `CLAUDE_SONNET_4_5_20250929_V1_0`       |
-| `*sonnet*4*` (not 4.5)             | `CLAUDE_SONNET_4_20250514_V1_0`         |
-| `*sonnet*3.7*` or `*sonnet*3-7*`   | `CLAUDE_3_7_SONNET_20250219_V1_0`       |
-| `*sonnet*` (other)                 | `CLAUDE_SONNET_4_5_20250929_V1_0`       |
-| `*opus*` (with 4.5/4-5)            | `claude-opus-4.5`                       |
-| `*opus*` (others)                  | `claude-opus-4.6`                       |
-| `*haiku*`                          | `claude-haiku-4.5`                      |
+| Anthropic Model                  | Kiro Internal Model ID            |
+|----------------------------------|-----------------------------------|
+| `*sonnet*4.5*` or `*sonnet*4-5*` | `CLAUDE_SONNET_4_5_20250929_V1_0` |
+| `*sonnet*4*` (not 4.5)           | `CLAUDE_SONNET_4_20250514_V1_0`   |
+| `*sonnet*3.7*` or `*sonnet*3-7*` | `CLAUDE_3_7_SONNET_20250219_V1_0` |
+| `*sonnet*` (other)               | `CLAUDE_SONNET_4_5_20250929_V1_0` |
+| `*opus*` (with 4.5/4-5)          | `claude-opus-4.5`                 |
+| `*opus*` (others)                | `claude-opus-4.6`                 |
+| `*haiku*`                        | `claude-haiku-4.5`                |
 
 ### Available Models
 
 The `/v1/models` endpoint returns the following models:
 
-| Model ID                              | Display Name                  | Thinking |
-|---------------------------------------|-------------------------------|----------|
-| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5             | No       |
-| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking)  | Yes      |
-| `claude-opus-4-5-20251101`            | Claude Opus 4.5               | No       |
-| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)    | Yes      |
-| `claude-opus-4-6`                     | Claude Opus 4.6               | No       |
-| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)    | Yes      |
-| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5              | No       |
-| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)   | Yes      |
+| Model ID                              | Display Name                 | Thinking |
+|---------------------------------------|------------------------------|----------|
+| `claude-sonnet-4-5-20250929`          | Claude Sonnet 4.5            | No       |
+| `claude-sonnet-4-5-20250929-thinking` | Claude Sonnet 4.5 (Thinking) | Yes      |
+| `claude-opus-4-5-20251101`            | Claude Opus 4.5              | No       |
+| `claude-opus-4-5-20251101-thinking`   | Claude Opus 4.5 (Thinking)   | Yes      |
+| `claude-opus-4-6`                     | Claude Opus 4.6              | No       |
+| `claude-opus-4-6-thinking`            | Claude Opus 4.6 (Thinking)   | Yes      |
+| `claude-haiku-4-5-20251001`           | Claude Haiku 4.5             | No       |
+| `claude-haiku-4-5-20251001-thinking`  | Claude Haiku 4.5 (Thinking)  | Yes      |
 
 > Note: Models ending with `-thinking` automatically enable extended thinking mode with a 20,000 token budget.
 
@@ -513,15 +513,15 @@ The `/v1/models` endpoint returns the following models:
 
 The proxy enhances cryptic Kiro API error messages with user-friendly explanations:
 
-| Error Code                       | User-Friendly Message                                                    |
-|----------------------------------|--------------------------------------------------------------------------|
-| `CONTENT_LENGTH_EXCEEDS_THRESHOLD` | Content length exceeds the maximum allowed limit. Please reduce your input size. |
-| `MONTHLY_REQUEST_LIMIT_REACHED`  | Monthly request limit reached. Please wait until next month or upgrade your plan. |
-| `MONTHLY_REQUEST_COUNT`          | Monthly request count limit reached. Please wait until next month or upgrade your plan. |
-| `RATE_LIMIT_EXCEEDED`            | Rate limit exceeded. Please slow down your requests and try again.       |
-| `SERVICE_UNAVAILABLE`            | Kiro service is temporarily unavailable. Please try again later.         |
-| `THROTTLING_EXCEPTION`           | Request throttled due to high traffic. Please wait a moment and retry.   |
-| `VALIDATION_EXCEPTION`           | Request validation failed. Please check your input parameters.           |
+| Error Code                         | User-Friendly Message                                                                   |
+|------------------------------------|-----------------------------------------------------------------------------------------|
+| `CONTENT_LENGTH_EXCEEDS_THRESHOLD` | Content length exceeds the maximum allowed limit. Please reduce your input size.        |
+| `MONTHLY_REQUEST_LIMIT_REACHED`    | Monthly request limit reached. Please wait until next month or upgrade your plan.       |
+| `MONTHLY_REQUEST_COUNT`            | Monthly request count limit reached. Please wait until next month or upgrade your plan. |
+| `RATE_LIMIT_EXCEEDED`              | Rate limit exceeded. Please slow down your requests and try again.                      |
+| `SERVICE_UNAVAILABLE`              | Kiro service is temporarily unavailable. Please try again later.                        |
+| `THROTTLING_EXCEPTION`             | Request throttled due to high traffic. Please wait a moment and retry.                  |
+| `VALIDATION_EXCEPTION`             | Request validation failed. Please check your input parameters.                          |
 
 ## Admin (Optional)
 
