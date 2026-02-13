@@ -12,6 +12,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::http_client::{ProxyConfig, build_client};
+use crate::kiro::errors::enhance_kiro_error;
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::{CallContext, MultiTokenManager};
@@ -21,6 +22,24 @@ const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
 
 /// Hard limit on total retries (to prevent infinite retries)
 const MAX_TOTAL_RETRIES: usize = 9;
+
+/// Enhance error message from Kiro API response body
+///
+/// Parses the response body as JSON and enhances the error message
+/// with user-friendly text. Falls back to original body if parsing fails.
+fn enhance_error_message(body: &str) -> String {
+    if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(body) {
+        let error_info = enhance_kiro_error(&error_json);
+        tracing::debug!(
+            original_message = %error_info.original_message,
+            reason = %error_info.reason,
+            "Kiro API error enhanced"
+        );
+        error_info.user_message
+    } else {
+        body.to_string()
+    }
+}
 
 /// Extract model name from Kiro API request body
 ///
@@ -337,7 +356,8 @@ impl KiroProvider {
 
             // 400 Bad Request
             if status.as_u16() == 400 {
-                anyhow::bail!("MCP request failed: {} {}", status, body);
+                let enhanced_msg = enhance_error_message(&body);
+                anyhow::bail!("MCP request failed: {} - {}", status, enhanced_msg);
             }
 
             // 401/403 credential issue
@@ -368,7 +388,8 @@ impl KiroProvider {
 
             // Other 4xx
             if status.is_client_error() {
-                anyhow::bail!("MCP request failed: {} {}", status, body);
+                let enhanced_msg = enhance_error_message(&body);
+                anyhow::bail!("MCP request failed: {} - {}", status, enhanced_msg);
             }
 
             // Fallback
@@ -496,7 +517,8 @@ impl KiroProvider {
 
             // 400 Bad Request - request issue, retry/switch credential is meaningless
             if status.as_u16() == 400 {
-                anyhow::bail!("{} API request failed: {} {}", api_type, status, body);
+                let enhanced_msg = enhance_error_message(&body);
+                anyhow::bail!("{} API request failed: {} - {}", api_type, status, enhanced_msg);
             }
 
             // 401/403 - more likely credential/permission issue: count as failure and allow failover
@@ -552,7 +574,8 @@ impl KiroProvider {
 
             // Other 4xx - usually request/configuration issue: return directly, don't count as credential failure
             if status.is_client_error() {
-                anyhow::bail!("{} API request failed: {} {}", api_type, status, body);
+                let enhanced_msg = enhance_error_message(&body);
+                anyhow::bail!("{} API request failed: {} - {}", api_type, status, enhanced_msg);
             }
 
             // Fallback: treat as retryable transient error (don't switch credentials)
