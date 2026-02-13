@@ -316,13 +316,64 @@ RUST_LOG=debug ./target/release/kiro-rs
 Configure Claude Code CLI to use kiro-rs as the API backend:
 
 ```bash
-# Set environment variables
+# Method 1: Environment variables
 export ANTHROPIC_BASE_URL="http://127.0.0.1:8990"
 export ANTHROPIC_API_KEY="sk-kiro-rs-qazWSXedcRFV123456"
 
-# Or configure via Claude Code settings
+# Method 2: Claude Code config command
 claude config set --global apiBaseUrl "http://127.0.0.1:8990"
+claude config set --global apiKey "sk-kiro-rs-qazWSXedcRFV123456"
 ```
+
+### Cursor
+
+Configure in Cursor settings (`settings.json`):
+
+```json
+{
+  "anthropic.baseUrl": "http://127.0.0.1:8990",
+  "anthropic.apiKey": "sk-kiro-rs-qazWSXedcRFV123456"
+}
+```
+
+Or via UI: Settings > Models > Anthropic > Base URL
+
+### Cline (VS Code Extension)
+
+1. Open VS Code Settings
+2. Search for "Cline"
+3. Set API Provider to "Anthropic"
+4. Set Base URL: `http://127.0.0.1:8990`
+5. Set API Key: `sk-kiro-rs-qazWSXedcRFV123456`
+
+### Continue
+
+Edit `~/.continue/config.json`:
+
+```json
+{
+  "models": [
+    {
+      "title": "Claude via kiro-rs",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "apiBase": "http://127.0.0.1:8990",
+      "apiKey": "sk-kiro-rs-qazWSXedcRFV123456"
+    }
+  ]
+}
+```
+
+### Roo Code / Other Tools
+
+Any tool that supports custom Anthropic API endpoints can be configured:
+
+| Tool       | Base URL Setting                    | API Key Setting           |
+|------------|-------------------------------------|---------------------------|
+| Roo Code   | Settings > API > Base URL           | Settings > API > API Key  |
+| Kilo Code  | Extension Settings > Base URL       | Extension Settings > Key  |
+| aider      | `--anthropic-api-base` flag         | `ANTHROPIC_API_KEY` env   |
+| OpenRouter | Custom endpoint configuration       | API Key field             |
 
 ### Anthropic Python SDK
 
@@ -352,16 +403,20 @@ with client.messages.stream(
         print(text, end="", flush=True)
 ```
 
-### Other AI Tools
+### cURL
 
-Any tool that supports custom Anthropic API endpoints can be configured to use kiro-rs:
-
-| Tool     | Configuration                                                         |
-|----------|-----------------------------------------------------------------------|
-| Cursor   | Settings > Models > Anthropic API URL: `http://127.0.0.1:8990`        |
-| Cline    | Extension Settings > API Provider > Base URL: `http://127.0.0.1:8990` |
-| Continue | `~/.continue/config.json` > models > apiBase: `http://127.0.0.1:8990` |
-| Roo Code | Settings > API Configuration > Base URL: `http://127.0.0.1:8990`      |
+```bash
+curl http://127.0.0.1:8990/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: sk-kiro-rs-qazWSXedcRFV123456" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "claude-sonnet-4-20250514",
+    "max_tokens": 1024,
+    "stream": true,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
 
 ## API Endpoints
 
