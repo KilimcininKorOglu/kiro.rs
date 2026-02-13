@@ -49,6 +49,15 @@ pub struct Model {
     #[serde(rename = "type")]
     pub model_type: String,
     pub max_tokens: i32,
+    /// Context window size (tokens)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_length: Option<i64>,
+    /// Maximum completion tokens
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_completion_tokens: Option<i64>,
+    /// Whether thinking is supported
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<bool>,
 }
 
 /// Models list response
@@ -61,7 +70,19 @@ pub struct ModelsResponse {
 // === Messages Endpoint Types ===
 
 /// Maximum thinking budget tokens
-const MAX_BUDGET_TOKENS: i32 = 24576;
+const MAX_BUDGET_TOKENS: i32 = 128_000;
+
+/// Get context window size based on model name
+pub fn get_context_window_size(model: &str) -> i32 {
+    let model_lower = model.to_lowercase();
+    // Opus 4.6 with -1m suffix gets 1M context
+    if model_lower.contains("opus") && model_lower.contains("-1m") {
+        1_000_000
+    } else {
+        // All other models get 200K
+        200_000
+    }
+}
 
 /// Thinking configuration
 #[derive(Debug, Deserialize, Clone)]
