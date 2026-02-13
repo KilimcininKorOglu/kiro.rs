@@ -9,26 +9,6 @@ use uuid::Uuid;
 
 use crate::kiro::model::events::Event;
 
-/// Find the nearest valid UTF-8 character boundary less than or equal to the target position
-///
-/// UTF-8 characters can occupy 1-4 bytes, slicing directly at byte position may cut in the middle
-/// of a multi-byte character causing panic. This function searches backward from the target position
-/// to find the nearest valid character boundary.
-fn find_char_boundary(s: &str, target: usize) -> usize {
-    if target >= s.len() {
-        return s.len();
-    }
-    if target == 0 {
-        return 0;
-    }
-    // Search backward from target position for valid character boundary
-    let mut pos = target;
-    while pos > 0 && !s.is_char_boundary(pos) {
-        pos -= 1;
-    }
-    pos
-}
-
 /// Quote characters to skip
 ///
 /// When thinking tags are wrapped by these characters, they are considered as quoting the tag rather than actual tags:
@@ -278,9 +258,35 @@ impl SseStateManager {
         self.has_tool_use = has;
     }
 
-    /// Set stop_reason
+    /// stop_reason priority (lower index = higher priority)
+    const STOP_REASON_PRIORITY: &'static [&'static str] = &[
+        "model_context_window_exceeded",
+        "max_tokens",
+        "tool_use",
+        "end_turn",
+    ];
+
+    /// Get stop_reason priority (lower = higher priority, unknown returns usize::MAX)
+    fn stop_reason_priority(reason: &str) -> usize {
+        Self::STOP_REASON_PRIORITY
+            .iter()
+            .position(|&r| r == reason)
+            .unwrap_or(usize::MAX)
+    }
+
+    /// Set stop_reason (higher priority reason can override lower priority)
+    ///
+    /// Priority from high to low: model_context_window_exceeded > max_tokens > tool_use > end_turn
     pub fn set_stop_reason(&mut self, reason: impl Into<String>) {
-        self.stop_reason = Some(reason.into());
+        let reason = reason.into();
+        let new_priority = Self::stop_reason_priority(&reason);
+        let should_set = match &self.stop_reason {
+            None => true,
+            Some(current) => new_priority < Self::stop_reason_priority(current),
+        };
+        if should_set {
+            self.stop_reason = Some(reason);
+        }
     }
 
     /// Check if there are non-thinking type content blocks (like text or tool_use)
@@ -341,7 +347,7 @@ impl SseStateManager {
         // Check if block already exists
         if let Some(block) = self.active_blocks.get_mut(&index) {
             if block.started {
-                tracing::debug!("Block {} already started, skipping duplicate content_block_start", index);
+                tracing::trace!("Block {} already started, skipping duplicate content_block_start", index);
                 return events;
             }
             block.started = true;
@@ -592,7 +598,7 @@ impl StreamContext {
                         .set_stop_reason("model_context_window_exceeded");
                 }
                 tracing::debug!(
-                    "Received contextUsageEvent: {}%, calculated input_tokens: {}",
+                    "Received contextUsageEvent: {:.4}%, calculated input_tokens: {}",
                     context_usage.context_usage_percentage,
                     actual_input_tokens
                 );
@@ -687,7 +693,7 @@ impl StreamContext {
                         .thinking_buffer
                         .len()
                         .saturating_sub("<thinking>".len());
-                    let safe_len = find_char_boundary(&self.thinking_buffer, target_len);
+                    let safe_len = self.thinking_buffer.floor_char_boundary(target_len);
                     if safe_len > 0 {
                         let safe_content = self.thinking_buffer[..safe_len].to_string();
                         // If thinking hasn't been extracted yet, and safe content is only whitespace,
@@ -757,7 +763,7 @@ impl StreamContext {
                         .thinking_buffer
                         .len()
                         .saturating_sub("</thinking>\n\n".len());
-                    let safe_len = find_char_boundary(&self.thinking_buffer, target_len);
+                    let safe_len = self.thinking_buffer.floor_char_boundary(target_len);
                     if safe_len > 0 {
                         let safe_content = self.thinking_buffer[..safe_len].to_string();
                         if !safe_content.is_empty() {
