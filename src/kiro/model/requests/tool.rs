@@ -49,9 +49,47 @@ impl Default for InputSchema {
 }
 
 impl InputSchema {
-    /// Create from JSON value
+    /// Create from JSON value with sanitization
+    /// 
+    /// Kiro API returns 400 "Improperly formed request" error if:
+    /// - required is an empty array []
+    /// - additionalProperties is present in schema
     pub fn from_json(json: serde_json::Value) -> Self {
-        Self { json }
+        Self { json: sanitize_json_schema(json) }
+    }
+}
+
+/// Sanitize JSON Schema from fields that Kiro API doesn't accept
+fn sanitize_json_schema(schema: serde_json::Value) -> serde_json::Value {
+    match schema {
+        serde_json::Value::Object(map) => {
+            let mut result = serde_json::Map::new();
+            
+            for (key, value) in map {
+                // Skip empty required arrays
+                if key == "required" {
+                    if let serde_json::Value::Array(arr) = &value {
+                        if arr.is_empty() {
+                            continue;
+                        }
+                    }
+                }
+                
+                // Skip additionalProperties - Kiro API doesn't support it
+                if key == "additionalProperties" {
+                    continue;
+                }
+                
+                // Recursively process nested objects
+                result.insert(key, sanitize_json_schema(value));
+            }
+            
+            serde_json::Value::Object(result)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.into_iter().map(sanitize_json_schema).collect())
+        }
+        other => other,
     }
 }
 
