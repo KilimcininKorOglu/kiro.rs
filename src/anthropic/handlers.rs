@@ -26,6 +26,64 @@ use super::stream::{BufferedStreamContext, SseEvent, StreamContext};
 use super::types::{CountTokensRequest, CountTokensResponse, ErrorResponse, MessagesRequest, Model, ModelsResponse, OutputConfig, Thinking};
 use super::websearch;
 
+/// Convert Kiro API error to Anthropic-compatible error response
+/// 
+/// Maps Kiro error messages to appropriate Anthropic error types and status codes
+/// to ensure client compatibility (e.g., Claude Code auto-compress triggers)
+fn convert_kiro_error_to_response(error_message: &str) -> Response {
+    let error_lower = error_message.to_lowercase();
+    
+    // Check for context/content length errors - these should trigger client compress
+    if error_lower.contains("improperly formed")
+        || error_lower.contains("content length")
+        || error_lower.contains("too long")
+        || error_lower.contains("context")
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new(
+                "invalid_request_error",
+                error_message,
+            )),
+        )
+            .into_response();
+    }
+    
+    // Check for rate limit errors
+    if error_lower.contains("rate limit") || error_lower.contains("throttl") {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ErrorResponse::new(
+                "rate_limit_error",
+                error_message,
+            )),
+        )
+            .into_response();
+    }
+    
+    // Check for overloaded errors
+    if error_lower.contains("overload") || error_lower.contains("capacity") {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse::new(
+                "overloaded_error",
+                error_message,
+            )),
+        )
+            .into_response();
+    }
+    
+    // Default: return as api_error with BAD_GATEWAY
+    (
+        StatusCode::BAD_GATEWAY,
+        Json(ErrorResponse::new(
+            "api_error",
+            format!("Upstream API call failed: {}", error_message),
+        )),
+    )
+        .into_response()
+}
+
 /// GET /v1/models
 ///
 /// Returns the list of available models
@@ -381,14 +439,7 @@ async fn handle_stream_request(
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!("Kiro API call failed: {}", e);
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(ErrorResponse::new(
-                    "api_error",
-                    format!("Upstream API call failed: {}", e),
-                )),
-            )
-                .into_response();
+            return convert_kiro_error_to_response(&e.to_string());
         }
     };
 
@@ -526,14 +577,7 @@ async fn handle_non_stream_request(
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!("Kiro API call failed: {}", e);
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(ErrorResponse::new(
-                    "api_error",
-                    format!("Upstream API call failed: {}", e),
-                )),
-            )
-                .into_response();
+            return convert_kiro_error_to_response(&e.to_string());
         }
     };
 
@@ -939,14 +983,7 @@ async fn handle_stream_request_buffered(
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!("Kiro API call failed: {}", e);
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(ErrorResponse::new(
-                    "api_error",
-                    format!("Upstream API call failed: {}", e),
-                )),
-            )
-                .into_response();
+            return convert_kiro_error_to_response(&e.to_string());
         }
     };
 
