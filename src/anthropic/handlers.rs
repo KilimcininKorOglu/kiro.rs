@@ -306,6 +306,14 @@ pub async fn post_messages(
         }
     };
 
+    // Log history message count for debugging
+    let history_count = conversion_result.conversation_state.history.len();
+    tracing::debug!(
+        original_messages = %payload.messages.len(),
+        converted_history = %history_count,
+        "Request conversion completed"
+    );
+
     // Build Kiro request
     let kiro_request = KiroRequest {
         conversation_state: conversion_result.conversation_state,
@@ -852,6 +860,14 @@ pub async fn post_messages_cc(
                 .into_response();
         }
     };
+
+    // Log history message count for debugging
+    let history_count = conversion_result.conversation_state.history.len();
+    tracing::debug!(
+        original_messages = %payload.messages.len(),
+        converted_history = %history_count,
+        "Request conversion completed"
+    );
 
     // Build Kiro request
     let kiro_request = KiroRequest {

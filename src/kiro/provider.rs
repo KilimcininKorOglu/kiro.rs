@@ -518,6 +518,13 @@ impl KiroProvider {
             // 400 Bad Request - request issue, retry/switch credential is meaningless
             if status.as_u16() == 400 {
                 let enhanced_msg = enhance_error_message(&body);
+                // Log request body preview for debugging (first 500 chars)
+                let body_preview = if request_body.len() > 500 {
+                    format!("{}...(truncated, total {} bytes)", &request_body[..500], request_body.len())
+                } else {
+                    request_body.to_string()
+                };
+                tracing::debug!("400 Bad Request - request body preview: {}", body_preview);
                 anyhow::bail!("{} API request failed: {} - {}", api_type, status, enhanced_msg);
             }
 
