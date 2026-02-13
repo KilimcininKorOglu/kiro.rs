@@ -6,5 +6,6 @@
   "region": "us-east-1",
   "adminApiKey": "sk-admin-your-secret-key",
   "thinkingSuffix": "-thinking",
-  "thinkingFormat": "thinking"
+  "thinkingFormat": "thinking",
+  "maxRequestBodyBytes": 400000
 }
