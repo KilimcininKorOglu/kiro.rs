@@ -668,6 +668,18 @@ fn build_history(req: &MessagesRequest, model_id: &str) -> Result<Vec<Message>, 
         history.push(Message::Assistant(auto_assistant));
     }
 
+    // FIX: Kiro API requires history to start with a user message.
+    // Some clients send conversations starting with an assistant message,
+    // which causes "Improperly formed request" error on Kiro.
+    // Prepend a placeholder user message so the history alternation is correct.
+    if !history.is_empty() {
+        if let Message::Assistant(_) = &history[0] {
+            tracing::info!("History started with assistant role, prepending placeholder user message for Kiro API compatibility");
+            let placeholder_user = HistoryUserMessage::new(".", model_id);
+            history.insert(0, Message::User(placeholder_user));
+        }
+    }
+
     Ok(history)
 }
 
