@@ -30,6 +30,15 @@ Complete all chunked operations without commentary.";
 /// Thinking mode prompt injected into system prompt when thinking is enabled
 const THINKING_MODE_PROMPT: &str = "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>200000</max_thinking_length>";
 
+/// Agentic mode prompt injected into system prompt for chunked file operations
+pub const AGENTIC_SYSTEM_PROMPT: &str = r#"IMPORTANT FILE WRITING RULES - Follow these to avoid truncation:
+1. For new files: Write in chunks of ~300 lines maximum
+2. For large content: First create with initial chunk, then append remaining sections using Edit tool
+3. For edits: Make surgical, targeted changes - avoid rewriting entire files
+4. Never attempt to write more than 500 lines in a single tool call
+5. If content exceeds limits, split into multiple sequential tool calls
+The API has hard output limits that will truncate large responses without warning."#;
+
 /// Parse model name and extract thinking mode from suffix
 /// Returns (actual_model, thinking_enabled)
 pub fn parse_model_and_thinking(model: &str, suffix: &str) -> (String, bool) {
@@ -50,6 +59,15 @@ pub fn inject_thinking_prompt(system_prompt: &str) -> String {
         THINKING_MODE_PROMPT.to_string()
     } else {
         format!("{}\n\n{}", THINKING_MODE_PROMPT, system_prompt)
+    }
+}
+
+/// Inject agentic mode prompt into system prompt
+pub fn inject_agentic_prompt(system_prompt: &str) -> String {
+    if system_prompt.is_empty() {
+        AGENTIC_SYSTEM_PROMPT.to_string()
+    } else {
+        format!("{}\n\n{}", AGENTIC_SYSTEM_PROMPT, system_prompt)
     }
 }
 
