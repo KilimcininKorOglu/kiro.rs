@@ -143,8 +143,9 @@ pub async fn post_messages(
         }
     };
 
-    // Detect if model name contains "thinking" suffix, if so override thinking config
-    override_thinking_from_model_name(&mut payload);
+    // Detect if model name contains thinking suffix, if so override thinking config
+    let thinking_suffix = state.config.thinking_suffix();
+    override_thinking_from_model_name(&mut payload, thinking_suffix);
 
     // Check if this is a WebSearch request
     if websearch::has_web_search_tool(&payload) {
@@ -548,19 +549,26 @@ async fn handle_non_stream_request(
     (StatusCode::OK, Json(response_body)).into_response()
 }
 
-/// Detect if model name contains "thinking" suffix, if so override thinking config
+/// Detect if model name contains thinking suffix, if so override thinking config
 ///
 /// - Opus 4.6: Override to adaptive type
 /// - Other models: Override to enabled type
 /// - budget_tokens fixed at 20000
-fn override_thinking_from_model_name(payload: &mut MessagesRequest) {
+/// - Removes the suffix from model name
+fn override_thinking_from_model_name(payload: &mut MessagesRequest, thinking_suffix: &str) {
     let model_lower = payload.model.to_lowercase();
-    if !model_lower.contains("thinking") {
+    let suffix_lower = thinking_suffix.to_lowercase();
+    
+    if !model_lower.ends_with(&suffix_lower) {
         return;
     }
 
+    // Remove suffix from model name
+    let actual_model = payload.model[..payload.model.len() - thinking_suffix.len()].to_string();
+    let actual_model_lower = actual_model.to_lowercase();
+
     let is_opus_4_6 =
-        model_lower.contains("opus") && (model_lower.contains("4-6") || model_lower.contains("4.6"));
+        actual_model_lower.contains("opus") && (actual_model_lower.contains("4-6") || actual_model_lower.contains("4.6"));
 
     let thinking_type = if is_opus_4_6 {
         "adaptive"
@@ -569,10 +577,14 @@ fn override_thinking_from_model_name(payload: &mut MessagesRequest) {
     };
 
     tracing::info!(
-        model = %payload.model,
+        original_model = %payload.model,
+        actual_model = %actual_model,
         thinking_type = thinking_type,
         "Model name contains thinking suffix, overriding thinking config"
     );
+
+    // Update model name (remove suffix)
+    payload.model = actual_model;
 
     payload.thinking = Some(Thinking {
         thinking_type: thinking_type.to_string(),
@@ -643,8 +655,9 @@ pub async fn post_messages_cc(
         }
     };
 
-    // Detect if model name contains "thinking" suffix, if so override thinking config
-    override_thinking_from_model_name(&mut payload);
+    // Detect if model name contains thinking suffix, if so override thinking config
+    let thinking_suffix = state.config.thinking_suffix();
+    override_thinking_from_model_name(&mut payload, thinking_suffix);
 
     // Check if this is a WebSearch request
     if websearch::has_web_search_tool(&payload) {

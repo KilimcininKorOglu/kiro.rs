@@ -90,6 +90,16 @@ pub struct Config {
     #[serde(default = "default_load_balancing_mode")]
     pub load_balancing_mode: String,
 
+    /// Model name suffix to trigger thinking mode (default: "-thinking")
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_suffix: Option<String>,
+
+    /// Thinking output format: "thinking", "think", or "reasoning_content"
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_format: Option<String>,
+
     /// Config file path (runtime metadata, not written to JSON)
     #[serde(skip)]
     config_path: Option<PathBuf>,
@@ -154,6 +164,8 @@ impl Default for Config {
             proxy_password: None,
             admin_api_key: None,
             load_balancing_mode: default_load_balancing_mode(),
+            thinking_suffix: None,
+            thinking_format: None,
             config_path: None,
         }
     }
@@ -163,6 +175,16 @@ impl Config {
     /// Get default config file path
     pub fn default_config_path() -> &'static str {
         "config.json"
+    }
+
+    /// Get thinking suffix (default: "-thinking")
+    pub fn thinking_suffix(&self) -> &str {
+        self.thinking_suffix.as_deref().unwrap_or("-thinking")
+    }
+
+    /// Get thinking format (default: "thinking")
+    pub fn thinking_format(&self) -> &str {
+        self.thinking_format.as_deref().unwrap_or("thinking")
     }
 
     /// Get effective Auth Region (for token refresh)

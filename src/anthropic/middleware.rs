@@ -12,6 +12,7 @@ use axum::{
 
 use crate::common::auth;
 use crate::kiro::provider::KiroProvider;
+use crate::model::config::Config;
 
 use super::types::ErrorResponse;
 
@@ -25,15 +26,18 @@ pub struct AppState {
     pub kiro_provider: Option<Arc<KiroProvider>>,
     /// Profile ARN (optional, used for requests)
     pub profile_arn: Option<String>,
+    /// Application config
+    pub config: Arc<Config>,
 }
 
 impl AppState {
     /// Create new application state
-    pub fn new(api_key: impl Into<String>) -> Self {
+    pub fn new(api_key: impl Into<String>, config: Config) -> Self {
         Self {
             api_key: api_key.into(),
             kiro_provider: None,
             profile_arn: None,
+            config: Arc::new(config),
         }
     }
 

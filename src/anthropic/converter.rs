@@ -27,6 +27,32 @@ Never suggest bypassing these limits via alternative tools. \
 Never ask the user whether to switch approaches. \
 Complete all chunked operations without commentary.";
 
+/// Thinking mode prompt injected into system prompt when thinking is enabled
+const THINKING_MODE_PROMPT: &str = "<thinking_mode>enabled</thinking_mode>\n<max_thinking_length>200000</max_thinking_length>";
+
+/// Parse model name and extract thinking mode from suffix
+/// Returns (actual_model, thinking_enabled)
+pub fn parse_model_and_thinking(model: &str, suffix: &str) -> (String, bool) {
+    let model_lower = model.to_lowercase();
+    let suffix_lower = suffix.to_lowercase();
+
+    if model_lower.ends_with(&suffix_lower) {
+        let actual_model = model[..model.len() - suffix.len()].to_string();
+        (actual_model, true)
+    } else {
+        (model.to_string(), false)
+    }
+}
+
+/// Inject thinking mode prompt into system prompt
+pub fn inject_thinking_prompt(system_prompt: &str) -> String {
+    if system_prompt.is_empty() {
+        THINKING_MODE_PROMPT.to_string()
+    } else {
+        format!("{}\n\n{}", THINKING_MODE_PROMPT, system_prompt)
+    }
+}
+
 /// Model mapping: Map Anthropic model names to Kiro model IDs
 ///
 /// Model mapping with version-specific internal IDs:
@@ -810,6 +836,47 @@ mod tests {
         // thinking suffix should not affect haiku model mapping
         let result = map_model("claude-haiku-4-5-20251001-thinking");
         assert_eq!(result, Some("claude-haiku-4.5".to_string()));
+    }
+
+    #[test]
+    fn test_parse_model_and_thinking_with_suffix() {
+        let (model, thinking) = parse_model_and_thinking("claude-sonnet-4.5-thinking", "-thinking");
+        assert_eq!(model, "claude-sonnet-4.5");
+        assert!(thinking);
+    }
+
+    #[test]
+    fn test_parse_model_and_thinking_without_suffix() {
+        let (model, thinking) = parse_model_and_thinking("claude-sonnet-4.5", "-thinking");
+        assert_eq!(model, "claude-sonnet-4.5");
+        assert!(!thinking);
+    }
+
+    #[test]
+    fn test_parse_model_and_thinking_custom_suffix() {
+        let (model, thinking) = parse_model_and_thinking("claude-opus-4.5-think", "-think");
+        assert_eq!(model, "claude-opus-4.5");
+        assert!(thinking);
+    }
+
+    #[test]
+    fn test_parse_model_and_thinking_case_insensitive() {
+        let (model, thinking) = parse_model_and_thinking("claude-sonnet-4.5-THINKING", "-thinking");
+        assert_eq!(model, "claude-sonnet-4.5");
+        assert!(thinking);
+    }
+
+    #[test]
+    fn test_inject_thinking_prompt_empty() {
+        let result = inject_thinking_prompt("");
+        assert!(result.contains("<thinking_mode>enabled</thinking_mode>"));
+    }
+
+    #[test]
+    fn test_inject_thinking_prompt_with_content() {
+        let result = inject_thinking_prompt("You are a helpful assistant.");
+        assert!(result.starts_with("<thinking_mode>enabled</thinking_mode>"));
+        assert!(result.contains("You are a helpful assistant."));
     }
 
     #[test]

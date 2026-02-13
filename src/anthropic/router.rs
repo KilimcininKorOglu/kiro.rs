@@ -8,6 +8,7 @@ use axum::{
 };
 
 use crate::kiro::provider::KiroProvider;
+use crate::model::config::Config;
 
 use super::{
     handlers::{count_tokens, get_models, post_messages, post_messages_cc},
@@ -32,14 +33,16 @@ const MAX_BODY_SIZE: usize = 50 * 1024 * 1024;
 /// # Parameters
 /// - `api_key`: API key for validating client requests
 /// - `kiro_provider`: Optional KiroProvider for calling upstream API
+/// - `config`: Application configuration
 
 /// Create Anthropic API router with KiroProvider
 pub fn create_router_with_provider(
     api_key: impl Into<String>,
     kiro_provider: Option<KiroProvider>,
     profile_arn: Option<String>,
+    config: Config,
 ) -> Router {
-    let mut state = AppState::new(api_key);
+    let mut state = AppState::new(api_key, config);
     if let Some(provider) = kiro_provider {
         state = state.with_kiro_provider(provider);
     }
