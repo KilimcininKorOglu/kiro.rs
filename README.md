@@ -403,25 +403,55 @@ Supports Claude's extended thinking feature:
 
 #### Thinking Suffix Trigger
 
-You can also enable thinking mode by appending a suffix to the model name (configurable via `thinkingSuffix` in config):
+This feature allows you to enable thinking mode simply by adding a suffix to the model name, without modifying the request body. This is especially useful for tools that don't support the `thinking` parameter directly.
 
+**How it works:**
+
+1. Client sends a request with model name like `claude-sonnet-4-thinking`
+2. The proxy detects the `-thinking` suffix and:
+   - Strips the suffix from the model name (`claude-sonnet-4-thinking` -> `claude-sonnet-4`)
+   - Automatically enables thinking mode with default budget
+   - Injects a system prompt to guide the model's reasoning process
+3. The response includes the model's thinking process based on the configured format
+
+**Configuration Options:**
+
+| Option           | Default      | Description                                              |
+|------------------|--------------|----------------------------------------------------------|
+| `thinkingSuffix` | `-thinking`  | The suffix to trigger thinking mode (e.g., `-think`, `-reason`) |
+| `thinkingFormat` | `thinking`   | Output format for the thinking content                   |
+
+**thinkingFormat Values:**
+
+| Value              | Description                                                      | Use Case                          |
+|--------------------|------------------------------------------------------------------|-----------------------------------|
+| `thinking`         | Wraps thinking in `<thinking>...</thinking>` tags                | Standard Anthropic format         |
+| `think`            | Wraps thinking in `<think>...</think>` tags                      | Alternative tag format            |
+| `reasoning_content`| Returns thinking as separate `reasoning_content` field           | OpenAI/DeepSeek compatible format |
+
+**Example Usage:**
+
+```bash
+# Instead of adding thinking parameter to request body:
+curl http://127.0.0.1:8990/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-api-key" \
+  -d '{
+    "model": "claude-sonnet-4-thinking",
+    "max_tokens": 16000,
+    "messages": [{"role": "user", "content": "Solve: What is 15 * 23?"}]
+  }'
+```
+
+**Custom Suffix Example:**
+
+If you set `"thinkingSuffix": "-reason"` in config.json, you would use:
 ```json
 {
-  "model": "claude-sonnet-4-thinking",
-  "max_tokens": 16000,
+  "model": "claude-sonnet-4-reason",
   "messages": [...]
 }
 ```
-
-When the model name ends with the configured suffix (default: `-thinking`):
-- Thinking mode is automatically enabled with default budget
-- The suffix is stripped from the model name before sending to Kiro API
-- A system prompt is injected to guide the model's thinking process
-
-The `thinkingFormat` config option controls the output format:
-- `thinking` - Standard Anthropic thinking format (default)
-- `think` - Alternative thinking format
-- `reasoning_content` - OpenAI-compatible reasoning format
 
 ### Tool Calling
 
