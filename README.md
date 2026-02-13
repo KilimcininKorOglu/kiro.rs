@@ -368,12 +368,12 @@ Edit `~/.continue/config.json`:
 
 Any tool that supports custom Anthropic API endpoints can be configured:
 
-| Tool       | Base URL Setting                    | API Key Setting           |
-|------------|-------------------------------------|---------------------------|
-| Roo Code   | Settings > API > Base URL           | Settings > API > API Key  |
-| Kilo Code  | Extension Settings > Base URL       | Extension Settings > Key  |
-| aider      | `--anthropic-api-base` flag         | `ANTHROPIC_API_KEY` env   |
-| OpenRouter | Custom endpoint configuration       | API Key field             |
+| Tool       | Base URL Setting              | API Key Setting          |
+|------------|-------------------------------|--------------------------|
+| Roo Code   | Settings > API > Base URL     | Settings > API > API Key |
+| Kilo Code  | Extension Settings > Base URL | Extension Settings > Key |
+| aider      | `--anthropic-api-base` flag   | `ANTHROPIC_API_KEY` env  |
+| OpenRouter | Custom endpoint configuration | API Key field            |
 
 ### Anthropic Python SDK
 
