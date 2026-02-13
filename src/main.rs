@@ -5,6 +5,7 @@ mod common;
 mod http_client;
 mod kiro;
 mod model;
+mod oauth;
 pub mod token;
 
 use std::sync::Arc;
@@ -97,7 +98,7 @@ async fn main() {
         api_url: config.count_tokens_api_url.clone(),
         api_key: config.count_tokens_api_key.clone(),
         auth_type: config.count_tokens_auth_type.clone(),
-        proxy: proxy_config,
+        proxy: proxy_config.clone(),
         tls_backend: config.tls_backend,
     });
 
@@ -117,10 +118,18 @@ async fn main() {
         .map(|k| !k.trim().is_empty())
         .unwrap_or(false);
 
+    // Create OAuth Web handler
+    let oauth_handler = Arc::new(oauth::OAuthWebHandler::new(
+        config.clone(),
+        proxy_config.clone(),
+        token_manager.clone(),
+    ));
+    let oauth_app = oauth::create_oauth_router(oauth_handler);
+
     let app = if let Some(admin_key) = &config.admin_api_key {
         if admin_key.trim().is_empty() {
             tracing::warn!("admin_api_key is empty, Admin API not enabled");
-            anthropic_app
+            anthropic_app.nest("/v0/oauth", oauth_app)
         } else {
             let admin_service = admin::AdminService::new(token_manager.clone());
             let admin_state = admin::AdminState::new(admin_key, admin_service);
@@ -131,12 +140,14 @@ async fn main() {
 
             tracing::info!("Admin API enabled");
             tracing::info!("Admin UI enabled: /admin");
+            tracing::info!("OAuth Web enabled: /v0/oauth/kiro");
             anthropic_app
                 .nest("/api/admin", admin_app)
                 .nest("/admin", admin_ui_app)
+                .nest("/v0/oauth", oauth_app)
         }
     } else {
-        anthropic_app
+        anthropic_app.nest("/v0/oauth", oauth_app)
     };
 
     // Start server
@@ -147,6 +158,8 @@ async fn main() {
     tracing::info!("  GET  /v1/models");
     tracing::info!("  POST /v1/messages");
     tracing::info!("  POST /v1/messages/count_tokens");
+    tracing::info!("OAuth Web:");
+    tracing::info!("  GET  /v0/oauth/kiro");
     if admin_key_valid {
         tracing::info!("Admin API:");
         tracing::info!("  GET  /api/admin/credentials");

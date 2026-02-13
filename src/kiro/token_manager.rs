@@ -1740,6 +1740,43 @@ impl MultiTokenManager {
         tracing::info!("Load balancing mode set to: {}", mode);
         Ok(())
     }
+
+    /// Refresh all tokens (OAuth Web API)
+    ///
+    /// Refreshes all credentials regardless of expiration status.
+    /// Returns the number of successfully refreshed tokens.
+    pub async fn refresh_all_tokens(&self) -> anyhow::Result<usize> {
+        let ids: Vec<u64> = {
+            let entries = self.entries.lock();
+            entries.iter().map(|e| e.id).collect()
+        };
+
+        if ids.is_empty() {
+            return Ok(0);
+        }
+
+        let mut refreshed_count = 0;
+        let mut errors = Vec::new();
+
+        for id in ids {
+            match self.force_refresh_token(id).await {
+                Ok(_) => {
+                    refreshed_count += 1;
+                    tracing::info!("Refreshed token for credential #{}", id);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to refresh token for credential #{}: {}", id, e);
+                    errors.push(format!("#{}: {}", id, e));
+                }
+            }
+        }
+
+        if refreshed_count == 0 && !errors.is_empty() {
+            anyhow::bail!("All refresh attempts failed: {}", errors.join("; "));
+        }
+
+        Ok(refreshed_count)
+    }
 }
 
 impl Drop for MultiTokenManager {
