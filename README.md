@@ -44,6 +44,10 @@ If you encounter request errors, especially when unable to refresh tokens or rec
   - [Region Configuration](#region-configuration)
   - [Authentication Methods](#authentication-methods)
   - [Environment Variables](#environment-variables)
+- [Usage with AI Tools](#usage-with-ai-tools)
+  - [Claude Code CLI](#claude-code-cli)
+  - [Anthropic Python SDK](#anthropic-python-sdk)
+  - [Other AI Tools](#other-ai-tools)
 - [API Endpoints](#api-endpoints)
   - [Standard Endpoints (/v1)](#standard-endpoints-v1)
   - [Claude Code Compatible Endpoints (/cc/v1)](#claude-code-compatible-endpoints-ccv1)
@@ -304,6 +308,60 @@ You can configure the log level via environment variables:
 ```bash
 RUST_LOG=debug ./target/release/kiro-rs
 ```
+
+## Usage with AI Tools
+
+### Claude Code CLI
+
+Configure Claude Code CLI to use kiro-rs as the API backend:
+
+```bash
+# Set environment variables
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8990"
+export ANTHROPIC_API_KEY="sk-kiro-rs-qazWSXedcRFV123456"
+
+# Or configure via Claude Code settings
+claude config set --global apiBaseUrl "http://127.0.0.1:8990"
+```
+
+### Anthropic Python SDK
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(
+    base_url="http://127.0.0.1:8990",
+    api_key="sk-kiro-rs-qazWSXedcRFV123456"
+)
+
+# Non-streaming
+message = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+print(message.content[0].text)
+
+# Streaming
+with client.messages.stream(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}]
+) as stream:
+    for text in stream.text_stream:
+        print(text, end="", flush=True)
+```
+
+### Other AI Tools
+
+Any tool that supports custom Anthropic API endpoints can be configured to use kiro-rs:
+
+| Tool       | Configuration                                                                 |
+|------------|-------------------------------------------------------------------------------|
+| Cursor     | Settings > Models > Anthropic API URL: `http://127.0.0.1:8990`                |
+| Cline      | Extension Settings > API Provider > Base URL: `http://127.0.0.1:8990`         |
+| Continue   | `~/.continue/config.json` > models > apiBase: `http://127.0.0.1:8990`         |
+| Roo Code   | Settings > API Configuration > Base URL: `http://127.0.0.1:8990`              |
 
 ## API Endpoints
 
